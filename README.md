@@ -49,9 +49,11 @@ All changes are processed locally through an operation queue, with backups and r
 | **Installer** | [**Download Swap-Prism-Setup.exe →**](https://github.com/damobeixon12/Swap-Prism/releases/latest/download/Swap-Prism-Setup.exe) |
 | **All releases** | [View release notes and previous versions](https://github.com/damobeixon12/Swap-Prism/releases) |
 
+
 <a href="https://github.com/damobeixon12/Swap-Prism/releases/latest/download/Swap-Prism-Setup.exe">
   <img src="https://img.shields.io/badge/%E2%AC%87%EF%B8%8F%20Download%20for%20Windows-Swap--Prism--Setup.exe-2ea44f?style=for-the-badge" alt="Download Swap-Prism-Setup.exe">
 </a>
+
 > [!NOTE]
 > Already have Swap Prism installed? The app includes a built-in updater, so you can update directly from within the application.
 
