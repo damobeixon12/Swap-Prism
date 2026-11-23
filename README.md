@@ -4,11 +4,18 @@
 
 **Visual customization and local asset management for Rocket League on Windows**
 
+[![Latest version](https://img.shields.io/github/v/release/damobeixon12/Swap-Prism?label=latest%20version&color=2ea44f&logo=github)](https://github.com/damobeixon12/Swap-Prism/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/damobeixon12/Swap-Prism/total?label=downloads&color=blue)](https://github.com/damobeixon12/Swap-Prism/releases)
 [![Platform](https://img.shields.io/badge/platform-Windows-0078D6?logo=windows&logoColor=white)](#installation)
 [![Built with Rust](https://img.shields.io/badge/UI-Rust%20%2B%20egui-000000?logo=rust&logoColor=white)](#architecture)
 [![Engine](https://img.shields.io/badge/engine-Python-3776AB?logo=python&logoColor=white)](#architecture)
-[![Download](https://img.shields.io/badge/download-latest%20release-2ea44f)](https://github.com/damobeixon12/Swap-Prism/releases/latest)
 [![Discord](https://img.shields.io/badge/Discord-join%20the%20community-5865F2?logo=discord&logoColor=white)](https://discord.gg/dXa24Y5HtX)
+
+<br>
+
+<a href="https://github.com/damobeixon12/Swap-Prism/releases/latest">
+  <img src="https://img.shields.io/badge/%E2%AC%87%EF%B8%8F%20Download%20for%20Windows-Latest%20Release-2ea44f?style=for-the-badge" alt="Download the latest version">
+</a>
 
 </div>
 
@@ -22,6 +29,7 @@ All changes are processed locally through an operation queue, with backups and r
 
 ## Table of Contents
 
+- [Download](#download)
 - [Features](#features)
 - [Architecture](#architecture)
 - [Installation](#installation)
@@ -29,6 +37,17 @@ All changes are processed locally through an operation queue, with backups and r
 - [Scope and Limitations](#scope-and-limitations)
 - [Community](#community)
 - [Disclaimer](#disclaimer)
+
+## Download
+
+| | |
+| --- | --- |
+| **Latest version** | [![Latest version](https://img.shields.io/github/v/release/damobeixon12/Swap-Prism?label=&color=2ea44f)](https://github.com/damobeixon12/Swap-Prism/releases/latest) |
+| **Platform** | Windows |
+| **Installer** | [**Download the latest installer →**](https://github.com/damobeixon12/Swap-Prism/releases/latest) |
+
+> [!NOTE]
+> Already have Swap Prism installed? The app includes a built-in updater, so you can update directly from within the application.
 
 ## Features
 
@@ -57,7 +76,7 @@ The application is distributed with an NSIS installer and a native update compon
 
 ## Installation
 
-1. Download the installer from the [latest GitHub release](https://github.com/damobeixon12/Swap-Prism/releases/latest).
+1. Download the installer from the [Download](#download) section above.
 2. Run the installer and launch Swap Prism.
 
 Updates preserve your existing selections, libraries, and backups.
