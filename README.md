@@ -10,15 +10,13 @@
 [![Built with Rust](https://img.shields.io/badge/UI-Rust%20%2B%20egui-000000?logo=rust&logoColor=white)](#architecture)
 [![Engine](https://img.shields.io/badge/engine-Python-3776AB?logo=python&logoColor=white)](#architecture)
 [![Discord](https://img.shields.io/badge/Discord-join%20the%20community-5865F2?logo=discord&logoColor=white)](https://discord.gg/dXa24Y5HtX)
+
 <a href="https://github.com/damobeixon12/Swap-Prism/releases/latest/download/Swap-Prism-Setup.exe">
   <img src="https://img.shields.io/badge/%E2%AC%87%EF%B8%8F%20Download%20for%20Windows-Swap--Prism--Setup.exe-2ea44f?style=for-the-badge" alt="Download Swap-Prism-Setup.exe">
 </a>
 
 <br>
 
-<a href="https://github.com/damobeixon12/Swap-Prism/releases/latest">
-  <img src="https://img.shields.io/badge/%E2%AC%87%EF%B8%8F%20Download%20for%20Windows-Latest%20Release-2ea44f?style=for-the-badge" alt="Download the latest version">
-</a>
 
 </div>
 
