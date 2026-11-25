@@ -34,6 +34,14 @@ pub fn apply(state: &mut LiveMatch, message: &Value) {
 pub fn watch(state: Arc<Mutex<LiveMatch>>) {
     static STARTED: std::sync::Once = std::sync::Once::new();
     STARTED.call_once(move || {
+        // Test hook: SP_FAKE_LOBBY="playlist;name,PrimaryId,team;..." simulates a match without the game.
+        if let Ok(fake) = std::env::var("SP_FAKE_LOBBY") {
+            let mut parts = fake.split(';');
+            let mut state = state.lock().unwrap();
+            state.playlist = parts.next().and_then(|p| p.parse().ok()).unwrap_or(11);
+            state.players = parts.filter_map(|p| { let f: Vec<&str> = p.split(',').collect(); Some((f.first()?.to_string(), f.get(1)?.to_string(), f.get(2)?.parse().ok()?, 0)) }).collect();
+            return;
+        }
         std::thread::spawn(move || loop {
             if let Ok(stream) = std::net::TcpStream::connect(("127.0.0.1", 49123)) {
                 for message in serde_json::Deserializer::from_reader(std::io::BufReader::new(stream)).into_iter::<Value>() {

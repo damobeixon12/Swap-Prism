@@ -180,9 +180,10 @@ pub fn scoreboard_rows(rows: &[LobbyRow]) -> Vec<(&LobbyRow, f32)> {
 }
 
 /// While the scoreboard button is held in a ranked match: rank icon left of each player's photo, MMR after the name.
+/// The window lives for the whole match and is only shown/hidden: creating it on each press flashed white (and black when closed).
 fn show_scoreboard(ctx: &egui::Context, board: Arc<Mutex<RankBoard>>) {
-    let visible = !board.lock().unwrap().lobby.is_empty() && platform::scoreboard_held() && platform::foreground_game();
-    let Some(bounds) = platform::game_bounds().filter(|_| visible) else {
+    let active = !board.lock().unwrap().lobby.is_empty() && platform::foreground_game();
+    let Some(bounds) = platform::game_bounds().filter(|_| active) else {
         platform::overlay_visibility(BOARD_TITLE, false);
         return;
     };
@@ -198,7 +199,10 @@ fn show_scoreboard(ctx: &egui::Context, board: Arc<Mutex<RankBoard>>) {
         .with_active(false)
         .with_mouse_passthrough(true)
         .with_window_level(egui::WindowLevel::AlwaysOnTop)
-        .with_visible(true);
+        .with_visible(false);
+    // A hidden window is not repainted, so the colour key and show/hide are driven from here (the watcher repaints on Tab).
+    platform::transparent_overlay(BOARD_TITLE, false);
+    platform::overlay_visibility(BOARD_TITLE, platform::scoreboard_held());
     ctx.show_viewport_deferred(egui::ViewportId::from_hash_of("swapprism-scoreboard"), builder, move |ctx, _| {
         ctx.request_repaint_after(Duration::from_millis(100));
         platform::transparent_overlay(BOARD_TITLE, false);

@@ -13,8 +13,9 @@ pub fn parse_mmr(result:&str)->Vec<(i64,String)>{
     out
 }
 
-/// Per ranked playlist on another player's Tracker page: rating and rank name from the playlists list ("Ranked Duel 1v1 / 521 / … / Gold II Div II").
-const LOBBY_SCRIPT:&str=r#"(()=>[...document.body.innerText.matchAll(/Ranked (Duel 1v1|Doubles 2v2|Standard 3v3)\n([\d.,]+)\n(?:[^\n]*\n){0,3}?(Supersonic Legend|Grand Champion I{1,3}|Champion I{1,3}|Diamond I{1,3}|Platinum I{1,3}|Gold I{1,3}|Silver I{1,3}|Bronze I{1,3}|Unranked)/g)].map(m=>[m[1].toUpperCase(),m[2],m[3]]))()"#;
+/// Per ranked playlist on another player's Tracker page: rating and rank name from the playlists section. Narrow pages list
+/// "Ranked Duel 1v1 / 521 / … / Gold II Div II"; wide ones (the hidden view) a table "Ranked Duel 1v1 / Gold II Division II / 521".
+const LOBBY_SCRIPT:&str=r#"(()=>{const ranks=/^(Supersonic Legend|Grand Champion I{1,3}|Champion I{1,3}|Diamond I{1,3}|Platinum I{1,3}|Gold I{1,3}|Silver I{1,3}|Bronze I{1,3}|Unranked)\b/;return [...document.body.innerText.matchAll(/Ranked (Duel 1v1|Doubles 2v2|Standard 3v3)\n((?:[^\n]*\n){0,5})/g)].map(m=>{const lines=m[2].split('\n');const mmr=lines.find(l=>/^[\d.,]+$/.test(l));const rank=lines.map(l=>(l.match(ranks)||[])[1]).find(Boolean);return mmr&&rank?[m[1].toUpperCase(),mmr,rank]:null}).filter(Boolean)})()"#;
 
 pub fn parse_lobby(result:&str)->Vec<(i64,String,usize)>{
     let mut out:Vec<(i64,String,usize)>=Vec::new();
@@ -47,7 +48,7 @@ impl App{
         let (playlist,players,ended)={let m=self.live_match.lock().unwrap();(m.playlist,m.players.clone(),m.ended)};
         let me=self.tracker_name.trim().to_lowercase();
         // Diagnostics for in-game checks: what the Stats API gave and what Tracker answered.
-        let debug=json!({"playlist":playlist,"players":players,"queue":self.lobby_queue,"results":*self.lobby_results.lock().unwrap(),"webview":self.lobby_web.is_some(),"current":self.lobby_current.as_ref().map(|c|c.0.clone())}).to_string();
+        let debug=json!({"playlist":playlist,"players":players,"queue":self.lobby_queue,"results":*self.lobby_results.lock().unwrap(),"webview":self.lobby_web.is_some(),"current":self.lobby_current.as_ref().map(|c|c.0.clone()),"page":*self.lobby_page.lock().unwrap()}).to_string();
         if !players.is_empty()&&debug!=self.lobby_debug{let _=fs::write(self.root.join("data/lobby-debug.json"),&debug);self.lobby_debug=debug;}
         if players.is_empty()||![10,11,13].contains(&playlist){
             self.rank_board.lock().unwrap().lobby.clear();
@@ -76,7 +77,10 @@ impl App{
             let Some(view)=&self.lobby_web else{return};
             let done=self.lobby_results.lock().unwrap().iter().filter(|r|r.0==name).count()>before;
             if done{self.lobby_current=None;}
-            else if now-started>Duration::from_secs(15){if before==0{self.lobby_results.lock().unwrap().push((name,"—".into(),0));}self.lobby_current=None;}
+            else if now-started>Duration::from_secs(15){
+                let page=self.lobby_page.clone();
+                let _=view.evaluate_script_with_callback("(()=>{const t=document.body.innerText;const i=t.indexOf('PLAYLISTS');return i+' '+t.length+' '+t.slice(i,i+700)})()",move|r|{*page.lock().unwrap()=r;});
+                if before==0{self.lobby_results.lock().unwrap().push((name,"—".into(),0));}self.lobby_current=None;}
             else if now-started>Duration::from_secs(5)&&now-asked>Duration::from_secs(2){
                 let results=self.lobby_results.clone();
                 let _=view.evaluate_script_with_callback(LOBBY_SCRIPT,move|r|{if let Some(m)=parse_lobby(&r).into_iter().find(|m|m.0==playlist){results.lock().unwrap().push((name.clone(),m.1,m.2));}});
@@ -87,14 +91,24 @@ impl App{
         if self.lobby_queue.is_empty(){return;}
         let (name,url)=self.lobby_queue.remove(0);
         if self.lobby_web.is_none(){
-            if self.tracker_context.is_none(){self.tracker_context=Some(wry::WebContext::new(Some(self.root.join("data/tracker-browser"))));}
-            let view=wry::WebViewBuilder::new_with_web_context(self.tracker_context.as_mut().unwrap())
-                .with_bounds(wry::Rect{position:wry::dpi::PhysicalPosition::new(0,0).into(),size:wry::dpi::PhysicalSize::new(900u32,700u32).into()})
-                .with_visible(false).with_focused(false).with_url(&url)
+            use wry::{WebViewBuilderExtWindows,WebViewExtWindows};
+            // Tracker only draws the ratings while the page renders, and a hidden page or one inside a minimized window is
+            // frozen: background throttling is off (own data folder, as different browser arguments require) and the view
+            // is moved to a tiny host window of its own.
+            let context=self.lobby_context.get_or_insert_with(||wry::WebContext::new(Some(self.root.join("data/tracker-lobby"))));
+            let view=wry::WebViewBuilder::new_with_web_context(context)
+                .with_additional_browser_args("--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection,CalculateNativeWinOcclusion --disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows")
+                .with_bounds(wry::Rect{position:wry::dpi::PhysicalPosition::new(0,0).into(),size:wry::dpi::PhysicalSize::new(1280u32,900u32).into()})
+                .with_visible(true).with_focused(false).with_url(&url)
                 .with_navigation_handler(|url|url.starts_with("https://rocketleague.tracker.network/")||url.starts_with("https://tracker.gg/")||url=="about:blank")
                 .with_new_window_req_handler(|_,_|wry::NewWindowResponse::Deny)
                 .build_as_child(frame);
-            match view{Ok(view)=>self.lobby_web=Some(view),Err(e)=>{let _=fs::write(self.root.join("data/lobby-debug.json"),format!("webview: {e}"));self.overlay_preferences.rank_lobby=false;return;}}
+            match view{Ok(view)=>{
+                // Out of the main window: a minimized parent freezes the page.
+                let host=crate::platform::offscreen_host();
+                if host!=0{let _=view.reparent(host);}
+                self.lobby_web=Some(view);
+            },Err(e)=>{let _=fs::write(self.root.join("data/lobby-debug.json"),format!("webview: {e}"));self.overlay_preferences.rank_lobby=false;return;}}
         }else if let Some(view)=&self.lobby_web{let _=view.load_url(&url);}
         let before=self.lobby_results.lock().unwrap().iter().filter(|r|r.0==name).count();
         self.lobby_current=Some((name,now,now,before));

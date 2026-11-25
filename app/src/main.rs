@@ -218,6 +218,8 @@ struct App {
     lobby_queue: Vec<(String,String)>,
     lobby_results: std::sync::Arc<std::sync::Mutex<Vec<(String,String,usize)>>>,
     lobby_debug: String,
+    lobby_page: std::sync::Arc<std::sync::Mutex<String>>,
+    lobby_context: Option<wry::WebContext>,
     lobby_current: Option<(String,Instant,Instant,usize)>,
     lobby_ended: u64,
     rank_placement: std::sync::Arc<std::sync::Mutex<overlay::Placement>>,
@@ -345,6 +347,8 @@ impl App {
             lobby_queue: Vec::new(),
             lobby_results: Default::default(),
             lobby_debug: String::new(),
+            lobby_page: Default::default(),
+            lobby_context: None,
             lobby_current: None,
             lobby_ended: 0,
             rank_placement: Default::default(),
@@ -760,7 +764,7 @@ fn main() {
     let _instance = unsafe {
         windows_sys::Win32::System::Threading::CreateMutexW(std::ptr::null(), 0, name.as_ptr())
     };
-    if shot.is_none() && unsafe { windows_sys::Win32::Foundation::GetLastError() } == 183 {
+    if shot.is_none() && std::env::var_os("SP_FAKE_LOBBY").is_none() && unsafe { windows_sys::Win32::Foundation::GetLastError() } == 183 {
         let title: Vec<u16> = "Swap Prism\0".encode_utf16().collect();
         unsafe {
             let window = windows_sys::Win32::UI::WindowsAndMessaging::FindWindowW(
