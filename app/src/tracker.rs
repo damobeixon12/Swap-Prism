@@ -40,6 +40,11 @@ impl App{
 
     /// Keeps the rank overlay fed: tiers from the save, MMR from the Tracker page (reloaded every 2 min while playing).
     pub(super) fn rank_tick(&mut self){
+        // Epic name from the game's own login log (read locally); Tracker profiles are keyed by it.
+        if self.tracker_name.trim().is_empty()&&s(&self.snapshot,"source").contains("SaveDataEpic"){
+            let name=s(&self.snapshot,"player_name").to_owned();
+            if !name.is_empty(){let _=fs::write(self.root.join("data/tracker.json"),json!({"epic":name}).to_string());self.tracker_name=name;}
+        }
         if self.tracker_requested.is_none(){if let Ok(url)=profile_url(&self.tracker_name){self.tracker_requested=Some(url);}}
         self.ensure_game_settings();self.watch_save();
         let tiers:Vec<(i64,usize)>=self.game_settings["skills"].as_array().map(|a|a.iter().filter_map(|s|Some((s["Playlist"].as_i64()?,s["Tier"].as_u64()? as usize))).collect()).unwrap_or_default();

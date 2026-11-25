@@ -16,6 +16,8 @@ pub struct Preferences {
     pub rank: bool,
     pub rank_modes: Vec<i64>,
     pub rank_position: Option<[f32; 2]>,
+    pub rank_tab: bool,
+    pub rank_anchor: String,
 }
 impl Default for Preferences {
     fn default() -> Self {
@@ -28,6 +30,8 @@ impl Default for Preferences {
             rank: false,
             rank_modes: vec![10, 11, 13],
             rank_position: None,
+            rank_tab: true,
+            rank_anchor: "left".into(),
         }
     }
 }
@@ -44,10 +48,43 @@ pub struct Placement {
 pub struct RankBoard {
     pub tiers: Vec<(i64, usize)>,
     pub mmr: Vec<(i64, String)>,
+    pub shown: bool,
 }
 pub const RANK_ROWS: [(i64, &str); 3] = [(10, "1v1"), (11, "2v2"), (13, "3v3")];
+pub const RANK_ANCHORS: [(&str, &str); 5] = [("left", "Izquierda"), ("top-left", "Arriba a la izquierda"), ("bottom-left", "Abajo a la izquierda"), ("top-right", "Arriba a la derecha"), ("bottom-right", "Abajo a la derecha")];
 
-/// Shown on its own whenever the game is in front; no background, movable like the FPS counter.
+/// Watches the scoreboard button on its own thread so the toggle works while Swap Prism is in the background.
+fn watch_scoreboard(ctx: &egui::Context, board: Arc<Mutex<RankBoard>>) {
+    static STARTED: std::sync::Once = std::sync::Once::new();
+    let ctx = ctx.clone();
+    STARTED.call_once(move || {
+        std::thread::spawn(move || loop {
+            if platform::scoreboard_pressed() && platform::foreground_game() {
+                let mut board = board.lock().unwrap();
+                board.shown = !board.shown;
+                ctx.request_repaint();
+            }
+            std::thread::sleep(Duration::from_millis(30));
+        });
+    });
+}
+
+/// Where the rank panel goes; keeps clear of the FPS counter when both share a corner.
+fn rank_position(p: &Preferences, bounds: [f32; 4], scale: f32, height: f32) -> egui::Pos2 {
+    let (l, t, r, b) = (bounds[0] / scale, bounds[1] / scale, bounds[2] / scale, bounds[3] / scale);
+    let fps = if p.fps && p.anchor == p.rank_anchor { p.size + 22. } else { 0. };
+    let middle = egui::pos2(l + 24., (t + b) / 2. - height / 2.);
+    match p.rank_anchor.as_str() {
+        "top-left" => egui::pos2(l + 14., t + 12. + fps),
+        "bottom-left" => egui::pos2(l + 14., b - height - 12. - fps),
+        "top-right" => egui::pos2(r - 184., t + 12. + fps),
+        "bottom-right" => egui::pos2(r - 184., b - height - 12. - fps),
+        "custom" => p.rank_position.map(|q| egui::pos2(q[0], q[1])).unwrap_or(middle),
+        _ => middle,
+    }
+}
+
+/// Shown whenever the game is in front, or toggled with the scoreboard button; no background.
 pub fn show_ranks(ctx: &egui::Context, preferences: &Preferences, board: Arc<Mutex<RankBoard>>, placement: Arc<Mutex<Placement>>) {
     let editing = placement.lock().unwrap().editing;
     let rows: Vec<(i64, &str)> = RANK_ROWS.iter().copied().filter(|r| preferences.rank_modes.contains(&r.0)).collect();
@@ -55,11 +92,16 @@ pub fn show_ranks(ctx: &egui::Context, preferences: &Preferences, board: Arc<Mut
         platform::overlay_visibility(RANK_TITLE, false);
         return;
     }
+    let tab = preferences.rank_tab;
+    if tab { watch_scoreboard(ctx, board.clone()); }
+    if tab && !editing && !board.lock().unwrap().shown {
+        platform::overlay_visibility(RANK_TITLE, false);
+        return;
+    }
     let scale = ctx.pixels_per_point();
     let bounds = platform::game_bounds().unwrap_or([0., 0., 1280. * scale, 860. * scale]);
     let height = rows.len() as f32 * 40. + if editing { 30. } else { 8. };
-    let position = preferences.rank_position.map(|p| egui::pos2(p[0], p[1]))
-        .unwrap_or(egui::pos2(bounds[0] / scale + 24., (bounds[1] + bounds[3]) / 2. / scale - height / 2.));
+    let position = rank_position(preferences, bounds, scale, height);
     let builder = egui::ViewportBuilder::default()
         .with_title(RANK_TITLE)
         .with_decorations(false)
@@ -76,8 +118,8 @@ pub fn show_ranks(ctx: &egui::Context, preferences: &Preferences, board: Arc<Mut
         ctx.request_repaint_after(Duration::from_millis(400));
         let editing = placement.lock().unwrap().editing;
         platform::transparent_overlay(RANK_TITLE, editing);
-        platform::overlay_visibility(RANK_TITLE, editing || platform::foreground_game());
         let board = board.lock().unwrap();
+        platform::overlay_visibility(RANK_TITLE, editing || ((board.shown || !tab) && platform::foreground_game()));
         egui::CentralPanel::default().frame(egui::Frame::new().fill(Color32::TRANSPARENT).inner_margin(4)).show(ctx, |ui| {
             for (id, label) in &rows {
                 let tier = board.tiers.iter().find(|t| t.0 == *id).map(|t| t.1).unwrap_or(0);
@@ -222,7 +264,7 @@ impl App {
         }
         if self.overlay_tab == 1 {
             ui.heading("Mi MMR en el juego");
-            design::muted(ui,"Tu insignia y tu MMR encima del juego, sin fondo. Solo los tuyos.");
+            design::muted(ui,"Actívalo y listo: detecta tu cuenta y pone tu insignia y tu MMR encima del juego, sin fondo.");
             ui.add_space(12.);
             design::card().show(ui,|ui|{
                 ui.horizontal_wrapped(|ui|{
@@ -234,23 +276,38 @@ impl App {
                     }
                     if changed{self.save_overlay();}
                 });
-                design::muted(ui,"Una vez activado sale solo cada vez que estás en el juego. Marca los modos que quieres ver.");
+                ui.add_space(8.);
+                ui.horizontal_wrapped(|ui|{
+                    ui.label("Cuándo:");
+                    let mut changed=ui.radio_value(&mut self.overlay_preferences.rank_tab,true,"Al pulsar el marcador (Tab / View)").changed();
+                    changed|=ui.radio_value(&mut self.overlay_preferences.rank_tab,false,"Siempre").changed();
+                    if changed{self.save_overlay();}
+                });
+                design::muted(ui,if self.overlay_preferences.rank_tab{"Pulsa el marcador una vez y se queda; vuelve a pulsarlo para quitarlo."}else{"Sale solo siempre que estás en el juego."});
+                ui.add_space(8.);
+                ui.horizontal_wrapped(|ui|{
+                    ui.label("Dónde:");
+                    for(anchor,label)in RANK_ANCHORS{if ui.selectable_label(self.overlay_preferences.rank_anchor==anchor,label).clicked(){self.overlay_preferences.rank_anchor=anchor.into();self.save_overlay();}}
+                    let editing=self.rank_placement.lock().unwrap().editing;
+                    if ui.selectable_label(editing||self.overlay_preferences.rank_anchor=="custom",if editing{"Fijar posición"}else{"Junto a tu nombre (arrastrar)"}).clicked(){
+                        let mut placement=self.rank_placement.lock().unwrap();
+                        if editing{if let Some(position)=placement.dragged{self.overlay_preferences.rank_position=Some(position);self.overlay_preferences.rank_anchor="custom".into();}}
+                        placement.editing=!editing;drop(placement);self.save_overlay();
+                    }
+                });
+                design::muted(ui,"Si coincide con la esquina del contador de FPS, se coloca debajo para no taparlo.");
                 let editing=self.rank_placement.lock().unwrap().editing;
-                if ui.button(if editing{"Fijar posición"}else{"Mover a cualquier lugar"}).clicked(){
-                    let mut placement=self.rank_placement.lock().unwrap();
-                    if editing{if let Some(position)=placement.dragged{self.overlay_preferences.rank_position=Some(position);}}
-                    placement.editing=!editing;drop(placement);self.save_overlay();
-                }
                 if editing{design::muted(ui,"Arrastra el panel a donde quieras (por ejemplo junto a tu nombre) y pulsa Fijar posición.");}
                 ui.add_space(6.);
                 if profile_url_ok(&self.tracker_name){
+                    design::muted(ui,&format!("Tu cuenta de Epic: {} (detectada automáticamente)",self.tracker_name.trim()));
                     let board=self.rank_board.lock().unwrap();
                     let read=RANK_ROWS.iter().map(|(id,label)|format!("{label} {}",board.mmr.iter().find(|m|m.0==*id).map(|m|m.1.as_str()).unwrap_or("—"))).collect::<Vec<_>>().join("   ");
                     drop(board);
-                    design::muted(ui,&format!("Leído de tu Tracker ({}): {read}",self.tracker_name.trim()));
+                    design::muted(ui,&format!("Leído de tu Tracker: {read}"));
                     design::muted(ui,"Se vuelve a leer cada 2 minutos mientras juegas, así que se actualiza solo al acabar cada partida.");
                 }else{
-                    ui.label(RichText::new("Primero pon tu nombre de Epic en la sección Tracker > Tracker web.").color(design::RED()));
+                    ui.label(RichText::new("Abre Rocket League una vez para detectar tu cuenta de Epic (o escríbela en Tracker > Tracker web).").color(design::RED()));
                 }
             });
             return;
