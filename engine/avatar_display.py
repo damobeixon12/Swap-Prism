@@ -95,8 +95,10 @@ def patch_avatar_abc(data):
     row=b'\xd0'+prop('tagame.controls:PlayerAvatar.m_playerInfoRow')
     ident=b'\xd0'+prop('tagame.controls:PlayerAvatar.m_playerId')
     def local_only(code):
-        compare=ident+b'\x60'+encode_u30(_ref(abc,'tagame.api.LocalPlayer'))+prop('PlayerID')+b'\x14'+len(code).to_bytes(3,'little')+code
-        return guard(row,guard(row+prop('bLocalPlayer'),code))+guard(ident,compare)
+        fallback=guard(row,guard(row+prop('bLocalPlayer'),code))
+        skip=b'\x10'+len(fallback).to_bytes(3,'little')
+        compare=ident+b'\x60'+encode_u30(_ref(abc,'tagame.api.LocalPlayer'))+prop('PlayerID')+b'\x14'+(len(code)+len(skip)+len(fallback)).to_bytes(3,'little')+code+skip
+        return guard(ident,compare)+fallback
     code=body['code'][:scope]+local_only(render)+body['code'][scope:]
     edits=[(body['lengthpos'],body['codepos']+len(body['code']),encode_u30(len(code))+code),
            (abc.string_pool_end,abc.string_pool_end,encode_u30(len(FRAME))+FRAME.encode())]

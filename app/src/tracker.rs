@@ -51,12 +51,18 @@ impl App{
         self.rank_board.lock().unwrap().tiers=tiers;
         let Some(view)=&self.tracker_web else{return};
         let now=std::time::Instant::now();
-        if self.tracker_polled.is_none_or(|t|now-t>Duration::from_secs(5)){
+        if self.tracker_polled.is_none_or(|t|now-t>Duration::from_secs(20)){
             self.tracker_polled=Some(now);let board=self.rank_board.clone();
             let _=view.evaluate_script_with_callback(MMR_SCRIPT,move|r|{let rows=parse_mmr(&r);if !rows.is_empty(){board.lock().unwrap().mmr=rows;}});
         }
-        if self.tracker_reloaded.is_none(){self.tracker_reloaded=Some(now);}
-        if self.running&&self.tracker_reloaded.is_some_and(|t|now-t>Duration::from_secs(120)){let _=view.reload();self.tracker_reloaded=Some(now);}
+        // Reload the Tracker page only after a match (the game rewrites the save), never periodically mid-game.
+        let saved=self.ranks_mtime.map(|t|t.duration_since(std::time::UNIX_EPOCH).map(|d|d.as_secs()).unwrap_or(0));
+        if self.tracker_reloaded.is_none(){self.tracker_reloaded=Some(now);self.tracker_saved=saved;}
+        if saved.is_some()&&saved!=self.tracker_saved&&!crate::platform::foreground_game(){
+            self.tracker_saved=saved;
+            // Tracker needs a moment to register the match; wait a bit after the save changes.
+            if self.tracker_reloaded.is_some_and(|t|now-t>Duration::from_secs(45)){let _=view.reload();self.tracker_reloaded=Some(now);}
+        }
     }
 
     pub(super) fn sync_tracker(&mut self,ctx:&egui::Context,frame:&eframe::Frame){

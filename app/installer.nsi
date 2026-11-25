@@ -12,10 +12,10 @@ SetCompressorDictSize 64
 SetDatablockOptimize on
 Icon "assets\swapprism.ico"
 UninstallIcon "assets\swapprism.ico"
-VIProductVersion "0.31.0.0"
+VIProductVersion "0.31.1.0"
 VIAddVersionKey "ProductName" "Swap Prism"
 VIAddVersionKey "FileDescription" "Instalador Swap Prism"
-VIAddVersionKey "FileVersion" "0.31.0"
+VIAddVersionKey "FileVersion" "0.31.1"
 VIAddVersionKey "LegalCopyright" "Swap Prism"
 !define MUI_ABORTWARNING
 !define MUI_ICON "assets\swapprism.ico"
@@ -82,7 +82,7 @@ Section "Swap Prism" SecMain
   WriteRegStr HKCU "Software\SWAPPRISM" "InstallDir" "$INSTDIR"
   WriteUninstaller "$INSTDIR\Uninstall.exe"
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\SWAPPRISM" "DisplayName" "Swap Prism"
-  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\SWAPPRISM" "DisplayVersion" "0.31.0"
+  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\SWAPPRISM" "DisplayVersion" "0.31.1"
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\SWAPPRISM" "UninstallString" '$\"$INSTDIR\Uninstall.exe$\"'
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\SWAPPRISM" "DisplayIcon" "$INSTDIR\swapprism.ico"
   CreateShortcut "$DESKTOP\Swap Prism.lnk" "$INSTDIR\Swap Prism.exe" "" "$INSTDIR\swapprism.ico"

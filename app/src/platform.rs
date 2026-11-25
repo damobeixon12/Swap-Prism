@@ -56,11 +56,21 @@ pub fn process_id(name: &str) -> Option<u32> {
     }
 }
 pub fn foreground_game() -> bool {
+    // A full process snapshot is costly; overlays ask several times a second, so remember the game's pid for 3 s.
+    static CACHE: std::sync::Mutex<Option<(Option<u32>, std::time::Instant)>> = std::sync::Mutex::new(None);
+    let game = {
+        let mut cache = CACHE.lock().unwrap();
+        match *cache {
+            Some((pid, at)) if at.elapsed() < std::time::Duration::from_secs(3) => pid,
+            _ => { let pid = process_id("RocketLeague.exe"); *cache = Some((pid, std::time::Instant::now())); pid }
+        }
+    };
+    let Some(game) = game else { return false };
     unsafe {
         let window = windows_sys::Win32::UI::WindowsAndMessaging::GetForegroundWindow();
         let mut pid = 0;
         windows_sys::Win32::UI::WindowsAndMessaging::GetWindowThreadProcessId(window, &mut pid);
-        process_id("RocketLeague.exe") == Some(pid)
+        pid == game
     }
 }
 
@@ -96,9 +106,19 @@ pub fn overlay_visibility(title:&str,visible:bool){
 pub fn scoreboard_pressed()->bool{
     use std::sync::atomic::{AtomicBool,Ordering};
     use windows_sys::Win32::UI::Input::{KeyboardAndMouse::{GetAsyncKeyState,VK_TAB},XboxController::{XInputGetState,XINPUT_GAMEPAD_BACK,XINPUT_STATE}};
+    use std::sync::atomic::AtomicU32;
     static HELD:AtomicBool=AtomicBool::new(false);
+    // Polling empty XInput slots is slow and causes stutters in games: only read connected pads, re-probe every ~2 s.
+    static CONNECTED:AtomicU32=AtomicU32::new(0);static TICK:AtomicU32=AtomicU32::new(0);
+    let probe=TICK.fetch_add(1,Ordering::Relaxed)%64==0;
     let mut down=unsafe{GetAsyncKeyState(VK_TAB as i32)}<0;
-    for pad in 0..4{let mut state:XINPUT_STATE=unsafe{std::mem::zeroed()};if unsafe{XInputGetState(pad,&mut state)}==0&&state.Gamepad.wButtons&XINPUT_GAMEPAD_BACK!=0{down=true;}}
+    let mut connected=CONNECTED.load(Ordering::Relaxed);
+    for pad in 0..4u32{
+        if !probe&&connected&(1<<pad)==0{continue;}
+        let mut state:XINPUT_STATE=unsafe{std::mem::zeroed()};
+        if unsafe{XInputGetState(pad,&mut state)}==0{connected|=1<<pad;if state.Gamepad.wButtons&XINPUT_GAMEPAD_BACK!=0{down=true;}}else{connected&=!(1<<pad);}
+    }
+    CONNECTED.store(connected,Ordering::Relaxed);
     let was=HELD.swap(down,Ordering::Relaxed);
     down&&!was
 }

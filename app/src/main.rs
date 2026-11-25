@@ -214,6 +214,7 @@ struct App {
     rank_placement: std::sync::Arc<std::sync::Mutex<overlay::Placement>>,
     tracker_polled: Option<std::time::Instant>,
     tracker_reloaded: Option<std::time::Instant>,
+    tracker_saved: Option<u64>,
 }
 impl App {
     fn new(cc: &eframe::CreationContext<'_>, root: PathBuf, smoke: Option<PathBuf>) -> Self {
@@ -332,6 +333,7 @@ impl App {
             rank_placement: Default::default(),
             tracker_polled: None,
             tracker_reloaded: None,
+            tracker_saved: None,
         };
         if let Some(i) = std::env::args().position(|a| a == "--overlay-window-check") {
             app.overlay_placement.lock().unwrap().capture =
