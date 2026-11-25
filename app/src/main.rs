@@ -204,6 +204,7 @@ struct App {
     overlay_preferences: overlay::Preferences,
     overlay_placement: std::sync::Arc<std::sync::Mutex<overlay::Placement>>,
     rank_board: std::sync::Arc<std::sync::Mutex<overlay::RankBoard>>,
+    rank_placement: std::sync::Arc<std::sync::Mutex<overlay::Placement>>,
     tracker_polled: Option<std::time::Instant>,
     tracker_reloaded: Option<std::time::Instant>,
 }
@@ -316,6 +317,7 @@ impl App {
                 overlay::Placement::default(),
             )),
             rank_board: Default::default(),
+            rank_placement: Default::default(),
             tracker_polled: None,
             tracker_reloaded: None,
         };
@@ -652,7 +654,7 @@ impl eframe::App for App {
             self.telemetry.reading.clone(),
             self.overlay_placement.clone(),
         );
-        overlay::show_ranks(ctx,&self.overlay_preferences,self.rank_board.clone());
+        overlay::show_ranks(ctx,&self.overlay_preferences,self.rank_board.clone(),self.rank_placement.clone());
         self.update_panel(ctx);
         if let Some((file,frame))=self.shot.as_mut(){
             *frame+=1;ctx.request_repaint();

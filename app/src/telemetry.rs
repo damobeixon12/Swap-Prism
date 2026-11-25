@@ -119,6 +119,18 @@ pub fn command(path: &Path, pid: u32) -> Command {
     cmd
 }
 
+/// ETW sessions outlive a PresentMon that was killed (e.g. Swap Prism closed abruptly). Leftovers from
+/// earlier runs keep the frame events and leave the new session with nothing, so stop them first.
+fn stop_stale_sessions() {
+    let own = format!("SWAPPRISM-FPS-{}-", std::process::id());
+    let Ok(out) = Command::new("logman").args(["query", "-ets"]).creation_flags(0x08000000).output() else { return };
+    for name in String::from_utf8_lossy(&out.stdout).lines().filter_map(|l| l.split_whitespace().next()) {
+        if name.starts_with("SWAPPRISM-FPS-") && !name.starts_with(&own) {
+            let _ = Command::new("logman").args(["stop", name, "-ets"]).creation_flags(0x08000000).stdout(Stdio::null()).stderr(Stdio::null()).status();
+        }
+    }
+}
+
 fn stop_session(path: &Path, pid: u32) {
     if verify_tool(path).is_ok() {
         let child = Command::new(path)
@@ -202,6 +214,7 @@ fn supervise(
                 ..Default::default()
             };
         }
+        stop_stale_sessions();
         let mut child = match command(&tool, pid).spawn() {
             Ok(child) => child,
             Err(error) => {

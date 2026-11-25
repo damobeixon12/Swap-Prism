@@ -92,16 +92,6 @@ pub fn overlay_visibility(title:&str,visible:bool){
         if (IsWindowVisible(window)!=0)!=visible{ShowWindow(window,if visible{SW_SHOWNOACTIVATE}else{SW_HIDE});}
     }
 }
-/// True once per press of the scoreboard button: Tab, or View/Back on an XInput pad. Read-only OS queries.
-pub fn scoreboard_pressed()->bool{
-    use std::sync::atomic::{AtomicBool,Ordering};
-    use windows_sys::Win32::UI::Input::{KeyboardAndMouse::{GetAsyncKeyState,VK_TAB},XboxController::{XInputGetState,XINPUT_GAMEPAD_BACK,XINPUT_STATE}};
-    static HELD:AtomicBool=AtomicBool::new(false);
-    let mut down=unsafe{GetAsyncKeyState(VK_TAB as i32)}<0;
-    for pad in 0..4{let mut state:XINPUT_STATE=unsafe{std::mem::zeroed()};if unsafe{XInputGetState(pad,&mut state)}==0&&state.Gamepad.wButtons&XINPUT_GAMEPAD_BACK!=0{down=true;}}
-    let was=HELD.swap(down,Ordering::Relaxed);
-    down&&!was
-}
 pub fn game_bounds() -> Option<[f32; 4]> {
     struct Search {
         pid: u32,

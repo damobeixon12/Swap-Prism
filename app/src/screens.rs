@@ -104,7 +104,7 @@ impl App {
                 let selected=ORDER.iter().position(|i|*i==self.fake_tab).unwrap_or(0);
                 if let Some(i)=d::tabs(ui,&["Foto y nombre","Rango","Títulos"],selected){self.fake_tab=ORDER[i];}
             }
-            "Overlay"=>{if let Some(i)=d::tabs(ui,&["FPS y ping","Rango en partida"],self.overlay_tab.min(1)){self.overlay_tab=i;}}
+            "Overlay"=>{if let Some(i)=d::tabs(ui,&["FPS","Mi MMR"],self.overlay_tab.min(1)){self.overlay_tab=i;}}
             "MySettings"=>{if let Some(i)=d::tabs(ui,&["Cámara","Controles","Vídeo"],self.settings_tab){self.settings_tab=i;}}
             "Tracker"=>{if let Some(i)=d::tabs(ui,&["Mis rangos","Tracker web"],self.tracker_tab){self.tracker_tab=i;}}
             "Studio"=>{
@@ -572,7 +572,7 @@ impl App {
         d::card().inner_margin(28).show(ui,|ui|{
             d::eyebrow(ui,"PRÓXIMAMENTE",if overlay{d::CYAN()}else{d::PURPLE()});ui.add_space(18.);
             ui.label(RichText::new(match(overlay,if overlay{self.overlay_tab}else{self.fake_tab}){
-                (true,0)=>"FPS y ping, sin perder de vista la partida.",(true,1)=>"El rango y el elo junto a los jugadores.",(true,_)=>"Un espacio para lo que viene.",
+                (true,0)=>"Tus FPS, sin perder de vista la partida.",(true,1)=>"Tu insignia y tu MMR encima del juego.",(true,_)=>"Un espacio para lo que viene.",
                 (false,0)=>"Tu rango visual, a tu manera.",(false,1)=>"Tu foto y tu nombre, en el mismo lugar.",_=>"Un título con tu palabra y tu color."
             }).size(23.).strong());ui.add_space(12.);
             d::muted(ui,if overlay{"Esta función todavía no está disponible. Aquí podrás configurar la información que ves durante la partida."}else{"Esta función todavía no está disponible. Aquí podrás personalizar cómo se ve tu perfil en tu cliente."});ui.add_space(18.);

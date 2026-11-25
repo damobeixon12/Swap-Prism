@@ -14,6 +14,8 @@ pub struct Preferences {
     pub size: f32,
     pub color: [u8; 3],
     pub rank: bool,
+    pub rank_modes: Vec<i64>,
+    pub rank_position: Option<[f32; 2]>,
 }
 impl Default for Preferences {
     fn default() -> Self {
@@ -24,6 +26,8 @@ impl Default for Preferences {
             size: 14.,
             color: [73, 245, 126],
             rank: false,
+            rank_modes: vec![10, 11, 13],
+            rank_position: None,
         }
     }
 }
@@ -35,110 +39,75 @@ pub struct Placement {
     pub captured: bool,
 }
 
-/// Own rank per ranked playlist: tier from the save, MMR from Tracker. `shown` flips with the scoreboard button.
+/// Own rank per ranked playlist: tier from the save, MMR from Tracker.
 #[derive(Default)]
 pub struct RankBoard {
     pub tiers: Vec<(i64, usize)>,
     pub mmr: Vec<(i64, String)>,
-    pub shown: bool,
 }
-const RANK_ROWS: [(i64, &str); 3] = [(10, "1v1"), (11, "2v2"), (13, "3v3")];
+pub const RANK_ROWS: [(i64, &str); 3] = [(10, "1v1"), (11, "2v2"), (13, "3v3")];
 
-/// Watches the scoreboard button on its own thread so the toggle works while Swap Prism is in the background.
-fn watch_scoreboard(ctx: &egui::Context, board: Arc<Mutex<RankBoard>>) {
-    static STARTED: std::sync::Once = std::sync::Once::new();
-    let ctx = ctx.clone();
-    STARTED.call_once(move || {
-        std::thread::spawn(move || loop {
-            if platform::scoreboard_pressed() && platform::foreground_game() {
-                let mut board = board.lock().unwrap();
-                board.shown = !board.shown;
-                ctx.request_repaint();
-            }
-            std::thread::sleep(Duration::from_millis(30));
-        });
-    });
-}
-
-pub fn show_ranks(ctx: &egui::Context, preferences: &Preferences, board: Arc<Mutex<RankBoard>>) {
-    if !preferences.rank {
-        board.lock().unwrap().shown = false;
+/// Shown on its own whenever the game is in front; no background, movable like the FPS counter.
+pub fn show_ranks(ctx: &egui::Context, preferences: &Preferences, board: Arc<Mutex<RankBoard>>, placement: Arc<Mutex<Placement>>) {
+    let editing = placement.lock().unwrap().editing;
+    let rows: Vec<(i64, &str)> = RANK_ROWS.iter().copied().filter(|r| preferences.rank_modes.contains(&r.0)).collect();
+    if (!preferences.rank && !editing) || rows.is_empty() {
+        platform::overlay_visibility(RANK_TITLE, false);
         return;
     }
-    watch_scoreboard(ctx, board.clone());
-    let shown = board.lock().unwrap().shown;
     let scale = ctx.pixels_per_point();
     let bounds = platform::game_bounds().unwrap_or([0., 0., 1280. * scale, 860. * scale]);
-    let height = RANK_ROWS.len() as f32 * 46. + 12.;
+    let height = rows.len() as f32 * 40. + if editing { 30. } else { 8. };
+    let position = preferences.rank_position.map(|p| egui::pos2(p[0], p[1]))
+        .unwrap_or(egui::pos2(bounds[0] / scale + 24., (bounds[1] + bounds[3]) / 2. / scale - height / 2.));
     let builder = egui::ViewportBuilder::default()
         .with_title(RANK_TITLE)
         .with_decorations(false)
         .with_transparent(true)
-        .with_inner_size([200., height])
-        .with_position(egui::pos2(bounds[0] / scale + 24., (bounds[1] + bounds[3]) / 2. / scale - height / 2.))
+        .with_inner_size([170., height])
+        .with_position(position)
         .with_resizable(false)
         .with_taskbar(false)
         .with_active(false)
-        .with_mouse_passthrough(true)
+        .with_mouse_passthrough(!editing)
         .with_window_level(egui::WindowLevel::AlwaysOnTop)
-        .with_visible(shown);
-    if !shown {
-        platform::overlay_visibility(RANK_TITLE, false);
-        return;
-    }
+        .with_visible(editing || platform::foreground_game());
     ctx.show_viewport_deferred(egui::ViewportId::from_hash_of("swapprism-rank"), builder, move |ctx, _| {
-        ctx.request_repaint_after(Duration::from_millis(200));
-        platform::transparent_overlay(RANK_TITLE, false);
+        ctx.request_repaint_after(Duration::from_millis(400));
+        let editing = placement.lock().unwrap().editing;
+        platform::transparent_overlay(RANK_TITLE, editing);
+        platform::overlay_visibility(RANK_TITLE, editing || platform::foreground_game());
         let board = board.lock().unwrap();
-        platform::overlay_visibility(RANK_TITLE, board.shown && platform::foreground_game());
         egui::CentralPanel::default().frame(egui::Frame::new().fill(Color32::TRANSPARENT).inner_margin(4)).show(ctx, |ui| {
-            ui.spacing_mut().item_spacing.y = 4.;
-            for (id, label) in RANK_ROWS {
-                let tier = board.tiers.iter().find(|t| t.0 == id).map(|t| t.1).unwrap_or(0);
-                let mmr = board.mmr.iter().find(|m| m.0 == id).map(|m| m.1.as_str()).unwrap_or("—");
-                // Near-black, not black: pure black is the window's transparent colour key.
-                egui::Frame::new().fill(Color32::from_rgb(18, 22, 30)).corner_radius(6).inner_margin(egui::Margin::symmetric(8, 4)).show(ui, |ui| {
-                    ui.set_width(176.);
-                    ui.horizontal(|ui| {
-                        let (rect, _) = ui.allocate_exact_size(Vec2::splat(32.), egui::Sense::hover());
-                        crate::ranks::rank_icon(ui, rect, tier);
-                        ui.label(RichText::new(label).size(14.).color(Color32::from_rgb(170, 178, 190)));
-                        ui.label(RichText::new(format!("[{mmr}]")).size(19.).strong().color(design::GREEN()));
-                    });
+            for (id, label) in &rows {
+                let tier = board.tiers.iter().find(|t| t.0 == *id).map(|t| t.1).unwrap_or(0);
+                let mmr = board.mmr.iter().find(|m| m.0 == *id).map(|m| m.1.as_str()).unwrap_or("—");
+                ui.horizontal(|ui| {
+                    let (rect, _) = ui.allocate_exact_size(Vec2::splat(32.), egui::Sense::hover());
+                    crate::ranks::rank_icon(ui, rect, tier);
+                    ui.label(RichText::new(*label).size(14.).strong().color(Color32::from_rgb(225, 230, 238)));
+                    ui.label(RichText::new(format!("[{mmr}]")).size(19.).strong().color(design::GREEN()));
                 });
+            }
+            if editing {
+                ui.label(RichText::new("Arrastra para mover").size(10.).color(design::MUTED()));
+                if ui.interact(ui.max_rect(), ui.id().with("drag"), egui::Sense::drag()).drag_started() {
+                    ctx.send_viewport_cmd(egui::ViewportCommand::StartDrag);
+                }
+                if let Some(rect) = ctx.input(|i| i.viewport().outer_rect) {
+                    placement.lock().unwrap().dragged = Some([rect.min.x, rect.min.y]);
+                }
             }
         });
     });
 }
 
-pub fn draw_metrics(ui: &mut egui::Ui, fps: Option<u32>, ping: Option<u32>, show_ping: bool) {
-    let green = design::GREEN();
+pub fn draw_metrics(ui: &mut egui::Ui, fps: Option<u32>) {
     ui.label(
-        RichText::new(format!(
-            "{} FPS",
-            fps.map(|v| v.to_string()).unwrap_or("—".into())
-        ))
-        .font(egui::FontId::proportional(13.))
-        .color(green),
+        RichText::new(format!("{} FPS", fps.map(|v| v.to_string()).unwrap_or("—".into())))
+            .font(egui::FontId::proportional(13.))
+            .color(design::GREEN()),
     );
-    if show_ping {
-        ui.horizontal(|ui| {
-            let (rect, _) = ui.allocate_exact_size(Vec2::new(22., 18.), egui::Sense::hover());
-            for i in 0..4 {
-                let h = 4. + i as f32 * 4.;
-                let r = egui::Rect::from_min_size(
-                    egui::pos2(rect.left() + i as f32 * 5., rect.bottom() - h),
-                    Vec2::new(3., h),
-                );
-                ui.painter().rect_filled(r, 1, green);
-            }
-            ui.label(
-                RichText::new(ping.map(|v| v.to_string()).unwrap_or("—".into()))
-                    .font(egui::FontId::proportional(13.))
-                    .color(green),
-            );
-        });
-    }
 }
 
 pub fn show(
@@ -253,11 +222,27 @@ impl App {
         }
         if self.overlay_tab == 1 {
             ui.heading("Mi MMR en el juego");
-            design::muted(ui,"Tu insignia y tu MMR de 1v1, 2v2 y 3v3 en un panel encima del juego. Solo los tuyos.");
+            design::muted(ui,"Tu insignia y tu MMR encima del juego, sin fondo. Solo los tuyos.");
             ui.add_space(12.);
             design::card().show(ui,|ui|{
-                if ui.checkbox(&mut self.overlay_preferences.rank,"Mostrar mi MMR en el juego").changed(){self.save_overlay();}
-                design::muted(ui,"En partida, pulsa el marcador (Tab, o View/Back en el mando) para mostrarlo; se queda fijo hasta que lo vuelvas a pulsar.");
+                ui.horizontal_wrapped(|ui|{
+                    let mut changed=ui.checkbox(&mut self.overlay_preferences.rank,"Mostrar mi MMR en el juego").changed();
+                    ui.add_space(18.);
+                    for(id,label)in RANK_ROWS{
+                        let mut on=self.overlay_preferences.rank_modes.contains(&id);
+                        if ui.checkbox(&mut on,label).changed(){if on{self.overlay_preferences.rank_modes.push(id);}else{self.overlay_preferences.rank_modes.retain(|m|*m!=id);}changed=true;}
+                    }
+                    if changed{self.save_overlay();}
+                });
+                design::muted(ui,"Una vez activado sale solo cada vez que estás en el juego. Marca los modos que quieres ver.");
+                let editing=self.rank_placement.lock().unwrap().editing;
+                if ui.button(if editing{"Fijar posición"}else{"Mover a cualquier lugar"}).clicked(){
+                    let mut placement=self.rank_placement.lock().unwrap();
+                    if editing{if let Some(position)=placement.dragged{self.overlay_preferences.rank_position=Some(position);}}
+                    placement.editing=!editing;drop(placement);self.save_overlay();
+                }
+                if editing{design::muted(ui,"Arrastra el panel a donde quieras (por ejemplo junto a tu nombre) y pulsa Fijar posición.");}
+                ui.add_space(6.);
                 if profile_url_ok(&self.tracker_name){
                     let board=self.rank_board.lock().unwrap();
                     let read=RANK_ROWS.iter().map(|(id,label)|format!("{label} {}",board.mmr.iter().find(|m|m.0==*id).map(|m|m.1.as_str()).unwrap_or("—"))).collect::<Vec<_>>().join("   ");
@@ -270,10 +255,10 @@ impl App {
             });
             return;
         }
-        ui.heading("FPS y ping");
+        ui.heading("FPS");
         design::muted(
             ui,
-            "Un indicador pequeño, verde y sin fondo sobre Rocket League.",
+            "Un contador pequeño y sin fondo sobre Rocket League.",
         );
         ui.add_space(16.);
         design::card().show(ui,|ui|{
@@ -281,7 +266,7 @@ impl App {
             let before=self.overlay_preferences.fps;ui.checkbox(&mut self.overlay_preferences.fps,"Mostrar FPS");
             if before!=self.overlay_preferences.fps{self.telemetry.enable(self.overlay_preferences.fps);self.save_overlay();}
             let reading=self.telemetry.snapshot();design::muted(ui,if self.overlay_preferences.fps{if reading.live_fps().is_some(){"Midiendo fotogramas del juego".into()}else{reading.status.clone()}}else{"Desactivado".into()});
-            ui.add_space(10.);draw_metrics(ui,reading.live_fps(),None,false);
+            ui.add_space(10.);draw_metrics(ui,reading.live_fps());
             design::muted(ui,"Usa ventana sin bordes para ver el overlay externo. Si el juego está minimizado o no hay datos recientes, aparece —.");
         });
         ui.add_space(12.);
@@ -334,12 +319,6 @@ impl App {
                 );
             }
         });
-        ui.add_space(12.);
-        design::card().show(ui,|ui|{
-            design::eyebrow(ui,"PING",design::MUTED());let mut enabled=false;ui.add_enabled(false,egui::Checkbox::new(&mut enabled,"Mostrar ping"));
-            design::muted(ui,"Pendiente de una fuente verificable del ping de esta partida. No se sustituye por un ping a Internet ni por el de una región.");
-            draw_ping_preview(ui);
-        });
     }
     fn save_overlay(&mut self) {
         self.config["overlay"] = serde_json::to_value(&self.overlay_preferences).unwrap();
@@ -350,21 +329,4 @@ impl App {
 }
 fn profile_url_ok(name: &str) -> bool {
     crate::tracker::profile_url(name).is_ok()
-}
-fn draw_ping_preview(ui: &mut egui::Ui) {
-    ui.horizontal(|ui| {
-        let (rect, _) = ui.allocate_exact_size(Vec2::new(22., 18.), egui::Sense::hover());
-        for i in 0..4 {
-            let h = 4. + 4. * i as f32;
-            ui.painter().rect_filled(
-                egui::Rect::from_min_size(
-                    egui::pos2(rect.left() + i as f32 * 5., rect.bottom() - h),
-                    Vec2::new(3., h),
-                ),
-                1,
-                design::GREEN(),
-            );
-        }
-        ui.label(RichText::new("—").color(design::GREEN()));
-    });
 }

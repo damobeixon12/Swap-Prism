@@ -9,7 +9,7 @@ pub fn paint(ui:&egui::Ui,rect:Rect,key:&str,color:Color32){
         "workshop"|"mapas"=> ("flag",include_bytes!("../assets/icons/flag.png")),
         "texturas"|"decal"|"decals"=> ("layers",include_bytes!("../assets/icons/layers.png")),
         "fake"|"perfil"|"foto y nombre"|"foto de perfil y nombre"|"perfil y títulos"=> ("user-round",include_bytes!("../assets/icons/user-round.png")),
-        "overlay"|"fps y ping"|"boostmeter"=> ("gauge",include_bytes!("../assets/icons/gauge.png")),
+        "overlay"|"fps"|"boostmeter"=> ("gauge",include_bytes!("../assets/icons/gauge.png")),
         "studio"|"sonidos y colores"|"personalización"|"paint finish"|"acabados"=> ("palette",include_bytes!("../assets/icons/palette.png")),
         "queue"|"cambios"|"cambios realizados"=> ("history",include_bytes!("../assets/icons/history.png")),
         "settings"|"ajustes"=> ("settings-2",include_bytes!("../assets/icons/settings-2.png")),

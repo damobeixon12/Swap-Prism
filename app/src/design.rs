@@ -34,7 +34,7 @@ fn rgb(c:[u8;3])->Color32{Color32::from_rgb(c[0],c[1],c[2])}
 /// Dark text drawn on top of the accent colour.
 #[allow(non_snake_case)] pub fn ON_ACCENT()->Color32{Color32::from_rgb(10,14,12)}
 pub const FAKE_TABS: [&str; 3] = ["Rank", "Foto de perfil y nombre", "Títulos"];
-pub const OVERLAY_TABS: [&str; 3] = ["FPS y ping", "Rank in game", "Soon"];
+pub const OVERLAY_TABS: [&str; 3] = ["FPS", "Mi MMR", "Soon"];
 
 pub fn setup(ctx: &egui::Context) {
     // set_visuals only edits the active theme. Windows' first light-theme
