@@ -518,7 +518,7 @@ impl App {
                                 self.studio_applied=v["studio"].clone();
                                 if self.studio_draft.as_object().map(|v|v.is_empty()).unwrap_or(true){self.studio_draft=v["studio"].clone();}
                                 self.profile_state = v["profile"].clone();
-                                if self.profile_active()&&v["profile"]["codec_revision"].as_u64().unwrap_or(0)<5&&self.profile_pending.is_none(){
+                                if self.profile_active()&&v["profile"]["codec_revision"].as_u64().unwrap_or(0)<v["profile_codec"].as_u64().unwrap_or(5)&&self.profile_pending.is_none(){
                                     self.profile_pending=Some(v["profile"]["settings"].clone());
                                     let _=fs::write(self.root.join("data/profile-queue.json"),serde_json::to_vec_pretty(&self.profile_pending).unwrap());
                                 }
@@ -680,7 +680,7 @@ impl eframe::App for App {
         self.render(ctx);
         if self.overlay_preferences.rank{self.rank_tick();}
         self.sync_tracker(ctx,_frame);
-        self.lobby_tick(_frame);
+        self.lobby_tick(ctx,_frame);
         self.queue_motion(ctx);
         self.capture_design(ctx);
         overlay::show(

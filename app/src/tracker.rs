@@ -28,9 +28,10 @@ pub fn player_url(name:&str,primary:&str)->Option<String>{
 
 impl App{
     /// Other players' MMR, read from their Tracker pages in a hidden view: once when they appear and once when the match ends.
-    pub(super) fn lobby_tick(&mut self,frame:&eframe::Frame){
+    pub(super) fn lobby_tick(&mut self,ctx:&egui::Context,frame:&eframe::Frame){
         if !(self.overlay_preferences.rank&&self.overlay_preferences.rank_lobby){return;}
         crate::live_match::watch(self.live_match.clone());
+        ctx.request_repaint_after(Duration::from_secs(3));
         let (playlist,players,ended)={let m=self.live_match.lock().unwrap();(m.playlist,m.players.clone(),m.ended)};
         let me=self.tracker_name.trim().to_lowercase();
         let others:Vec<_>=players.into_iter().filter(|p|p.0.to_lowercase()!=me).collect();
@@ -39,6 +40,8 @@ impl App{
             if others.is_empty(){self.lobby_asked.clear();self.lobby_queue.clear();let mut r=self.lobby_results.lock().unwrap();if r.len()>200{r.clear();}}
             return;
         }
+        // The window is usually minimized while playing: keep ticking so lookups advance.
+        ctx.request_repaint_after(Duration::from_secs(1));
         if ended!=self.lobby_ended{self.lobby_ended=ended;self.lobby_asked.clear();}
         for (name,primary,_) in &others{
             if self.lobby_asked.contains(name){continue;}

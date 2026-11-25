@@ -84,7 +84,7 @@ def request(obj):
             if selected:title_ids.add(selected)
             inventory['titles']=[{'id':key,'equipped':key==selected} for key in sorted(title_ids)]
         except (ValueError,OSError) as exc:inventory={'inventory':[],'active':None};errors.append(str(exc))
-        return {'snapshot':inventory,'packs':packs(),'sounds':media_store.audio_library(api),'state':inspect_state(api.ROOT/'data'),'colors':list(PAINTS),'errors':errors,'profile':profile_manager.load(api.ROOT),'studio':studio_backend.load(api),'audio_limits':studio_backend.manifest(api)}
+        return {'snapshot':inventory,'packs':packs(),'sounds':media_store.audio_library(api),'state':inspect_state(api.ROOT/'data'),'colors':list(PAINTS),'errors':errors,'profile':profile_manager.load(api.ROOT),'profile_codec':profile_manager.CODEC_REVISION,'studio':studio_backend.load(api),'audio_limits':studio_backend.manifest(api)}
     if action=='sound_import':return studio_backend.import_mp3(api,obj['path'],obj['kind'])
     if action=='sound_preview':
         import winsound
