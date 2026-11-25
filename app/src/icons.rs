@@ -13,6 +13,8 @@ pub fn paint(ui:&egui::Ui,rect:Rect,key:&str,color:Color32){
         "studio"|"sonidos y colores"|"personalización"|"paint finish"|"acabados"=> ("palette",include_bytes!("../assets/icons/palette.png")),
         "queue"|"cambios"|"cambios realizados"=> ("history",include_bytes!("../assets/icons/history.png")),
         "settings"|"ajustes"=> ("settings-2",include_bytes!("../assets/icons/settings-2.png")),
+        "play"|"jugar"=> ("sparkles",include_bytes!("../assets/icons/sparkles.png")),
+        "mysettings"|"mis ajustes"=> ("paintbrush",include_bytes!("../assets/icons/paintbrush.png")),
         "home"|"inicio"=> ("house",include_bytes!("../assets/icons/house.png")),
         "wheels"|"wheel"=> ("circle-dot",include_bytes!("../assets/icons/circle-dot.png")),
         "boost"|"rocket boost"=> ("flame",include_bytes!("../assets/icons/flame.png")),

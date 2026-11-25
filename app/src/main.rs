@@ -17,6 +17,7 @@ mod update_panel;
 mod ranks;
 mod qa;
 mod screens;
+mod settings_page;
 mod telemetry;
 mod update;
 use eframe::egui::{self, Color32, RichText, Vec2};
@@ -183,6 +184,13 @@ struct App {
     navigation_search: String,
     changes_history: bool,
     file_check: Value,
+    game_settings: Value,
+    settings_draft: Value,
+    settings_tab: usize,
+    settings_loading: bool,
+    launcher_state: Value,
+    launcher_loading: bool,
+    tracker_tab: usize,
     audio_preview: Option<(String,Instant,f32)>,
     overlay_tab: usize,
     pack_query: String,
@@ -279,6 +287,13 @@ impl App {
             navigation_search: String::new(),
             changes_history: false,
             file_check: Value::Null,
+            game_settings: Value::Null,
+            settings_draft: Value::Null,
+            settings_tab: 0,
+            settings_loading: false,
+            launcher_state: Value::Null,
+            launcher_loading: false,
+            tracker_tab: 0,
             audio_preview: None,
             overlay_tab: 0,
             pack_query: String::new(),
@@ -452,6 +467,8 @@ impl App {
                 Event::Engine(action, result) => {
                     self.busy = false;
                     self.job_fraction=None;
+                    if action.starts_with("game_settings"){self.settings_loading=false;}
+                    if action.starts_with("launcher_"){self.launcher_loading=false;}
                     if let Err(error) = &result {
                         let _ = fs::write(self.root.join("data/last-error.txt"), error);
                     }
@@ -506,6 +523,13 @@ impl App {
                             } else if action == "sound_preview" {
                                 self.audio_preview=None;
                                 self.status="Preescucha terminada.".into();
+                            } else if action == "game_settings" || action == "game_settings_write" {
+                                self.settings_draft=v["values"].clone();
+                                self.status=if action=="game_settings_write"{format!("Ajustes guardados. Copia de seguridad en {}",s(&v,"backup"))}else{"Ajustes leídos de tu partida guardada.".into()};
+                                self.game_settings=v;
+                            } else if action.starts_with("launcher_") {
+                                if v.get("steam").is_some(){self.launcher_state=v.clone();}
+                                self.status=match action.as_str(){"launcher_play"=>"Iniciando Rocket League…","launcher_steam_play"=>"Iniciando Rocket League desde Steam…","launcher_steam_add"=>"Rocket League añadido a Steam.",_=>"Lanzador listo."}.into();
                             } else if action == "verify_files" {
                                 self.state=v["state"].clone();self.profile_state=v["profile"].clone();
                                 let healed=v["healed"].as_array().map(|a|a.len()).unwrap_or(0);let modified=v["modified"].as_array().map(|a|a.len()).unwrap_or(0);
@@ -622,7 +646,7 @@ impl eframe::App for App {
         self.update_panel(ctx);
         if let Some((file,frame))=self.shot.as_mut(){
             *frame+=1;ctx.request_repaint();
-            if *frame==40{ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot(Default::default()));}
+            if *frame==std::env::var("SP_SHOT_FRAME").ok().and_then(|v|v.parse().ok()).unwrap_or(40){ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot(Default::default()));}
             let shot=ctx.input(|i|i.events.iter().find_map(|e|if let egui::Event::Screenshot{image,..}=e{Some(image.clone())}else{None}));
             if let Some(image)=shot{
                 let pixels:Vec<u8>=image.pixels.iter().flat_map(|c|c.to_array()).collect();

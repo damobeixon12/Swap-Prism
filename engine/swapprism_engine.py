@@ -57,6 +57,17 @@ def request(obj):
     if action=='workshop_import':return workshop.import_map(api,obj['path'])
     if action=='workshop_remove':return workshop.remove(api,obj['key'])
     if action=='refresh_state':return {'state':inspect_state(api.ROOT/'data')}
+    if action=='game_settings':
+        import game_settings;return game_settings.read()
+    if action=='game_settings_write':
+        import game_settings;return game_settings.write(api.ROOT,obj['changes'])
+    if action.startswith('launcher_'):
+        import launcher;game=Path(obj['game']).resolve() if obj.get('game') else None
+        if action=='launcher_status':return launcher.status(game)
+        if game is None:raise ValueError('Elige la carpeta del juego en Ajustes.')
+        if action=='launcher_play':return launcher.play(game)
+        if action=='launcher_steam_add':return launcher.add_to_steam(api.ROOT,game)
+        if action=='launcher_steam_play':return launcher.play_steam(api.ROOT,game)
     if action=='verify_files':
         result=verify_files(Path(obj['game']).resolve(),api.ROOT/'data')
         if result['healed']:profile_manager.after_restore(api.ROOT,result['healed'])

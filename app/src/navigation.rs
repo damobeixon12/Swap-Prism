@@ -2,9 +2,9 @@ use super::*;
 use crate::design as d;
 
 /// Sidebar entries: (section key, label). Sub-pages live in tabs inside each page.
-pub(super) const NAV:[(&str,&str);10]=[
-    ("Home","Inicio"),("Skins","Skins"),("Texturas","Texturas"),("Fake","Perfil"),("Studio","Sonidos y colores"),
-    ("Workshop","Mapas"),("Overlay","Overlay"),("Tracker","Tracker"),("Queue","Cambios"),("Settings","Ajustes"),
+pub(super) const NAV:[(&str,&str);12]=[
+    ("Home","Inicio"),("Play","Jugar"),("Skins","Skins"),("Texturas","Texturas"),("Fake","Perfil"),("Studio","Sonidos y colores"),
+    ("Workshop","Mapas"),("MySettings","Mis ajustes"),("Overlay","Overlay"),("Tracker","Tracker"),("Queue","Cambios"),("Settings","Ajustes"),
 ];
 
 fn row(ui:&mut egui::Ui,key:&str,label:&str,selected:bool,badge:usize)->bool{

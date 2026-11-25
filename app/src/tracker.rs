@@ -27,7 +27,7 @@ impl App{
     }
 
     pub(super) fn sync_tracker(&mut self,ctx:&egui::Context,frame:&eframe::Frame){
-        let show=self.section=="Tracker"&&self.visible&&self.design_dir.is_none()&&self.tracker_requested.is_some();
+        let show=self.section=="Tracker"&&self.tracker_tab==1&&self.visible&&self.design_dir.is_none()&&self.tracker_requested.is_some();
         if !show{if let Some(view)=&self.tracker_web{let _=view.set_visible(false);}return;}
         let rect=self.tracker_bounds;let scale=ctx.pixels_per_point()as f64;
         let bounds=wry::Rect{position:wry::dpi::PhysicalPosition::new((rect.left()as f64*scale)as i32,(rect.top()as f64*scale)as i32).into(),size:wry::dpi::PhysicalSize::new((rect.width()as f64*scale).max(1.)as u32,(rect.height()as f64*scale).max(1.)as u32).into()};
