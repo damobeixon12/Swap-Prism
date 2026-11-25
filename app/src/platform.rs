@@ -103,11 +103,13 @@ pub fn overlay_visibility(title:&str,visible:bool){
     }
 }
 /// True once per press of the scoreboard button: Tab, or View/Back on an XInput pad. Read-only OS queries.
+static SCOREBOARD_HELD:std::sync::atomic::AtomicBool=std::sync::atomic::AtomicBool::new(false);
+/// Whether the scoreboard button is down right now (as last polled by scoreboard_pressed).
+pub fn scoreboard_held()->bool{SCOREBOARD_HELD.load(std::sync::atomic::Ordering::Relaxed)}
 pub fn scoreboard_pressed()->bool{
-    use std::sync::atomic::{AtomicBool,Ordering};
+    use std::sync::atomic::Ordering;
     use windows_sys::Win32::UI::Input::{KeyboardAndMouse::{GetAsyncKeyState,VK_TAB},XboxController::{XInputGetState,XINPUT_GAMEPAD_BACK,XINPUT_STATE}};
     use std::sync::atomic::AtomicU32;
-    static HELD:AtomicBool=AtomicBool::new(false);
     // Polling empty XInput slots is slow and causes stutters in games: only read connected pads, re-probe every ~2 s.
     static CONNECTED:AtomicU32=AtomicU32::new(0);static TICK:AtomicU32=AtomicU32::new(0);
     let probe=TICK.fetch_add(1,Ordering::Relaxed)%64==0;
@@ -119,7 +121,7 @@ pub fn scoreboard_pressed()->bool{
         if unsafe{XInputGetState(pad,&mut state)}==0{connected|=1<<pad;if state.Gamepad.wButtons&XINPUT_GAMEPAD_BACK!=0{down=true;}}else{connected&=!(1<<pad);}
     }
     CONNECTED.store(connected,Ordering::Relaxed);
-    let was=HELD.swap(down,Ordering::Relaxed);
+    let was=SCOREBOARD_HELD.swap(down,Ordering::Relaxed);
     down&&!was
 }
 pub fn game_bounds() -> Option<[f32; 4]> {

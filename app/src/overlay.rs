@@ -4,6 +4,7 @@ use std::sync::{Arc, Mutex};
 
 const TITLE:&str="Swap Prism · Overlay";
 const RANK_TITLE:&str="Swap Prism · Rango";
+const BOARD_TITLE:&str="Swap Prism · Marcador";
 
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(default)]
@@ -51,8 +52,17 @@ pub struct RankBoard {
     pub tiers: Vec<(i64, usize)>,
     pub mmr: Vec<(i64, String)>,
     pub shown: bool,
-    /// Other players in a ranked match: (name, team, MMR or "…" while it is read).
-    pub lobby: Vec<(String, i64, String)>,
+    /// Everyone in a ranked match, drawn next to their row of the in-game scoreboard.
+    pub lobby: Vec<LobbyRow>,
+}
+#[derive(Clone, PartialEq)]
+pub struct LobbyRow {
+    pub name: String,
+    pub team: i64,
+    pub score: i64,
+    /// Rating, or "…" while it is read.
+    pub mmr: String,
+    pub tier: usize,
 }
 pub const RANK_ROWS: [(i64, &str); 3] = [(10, "1v1"), (11, "2v2"), (13, "3v3")];
 pub const RANK_ANCHORS: [(&str, &str); 5] = [("left", "Izquierda"), ("top-left", "Arriba a la izquierda"), ("bottom-left", "Abajo a la izquierda"), ("top-right", "Arriba a la derecha"), ("bottom-right", "Abajo a la derecha")];
@@ -63,11 +73,13 @@ fn watch_scoreboard(ctx: &egui::Context, board: Arc<Mutex<RankBoard>>) {
     let ctx = ctx.clone();
     STARTED.call_once(move || {
         std::thread::spawn(move || loop {
+            let held = platform::scoreboard_held();
             if platform::scoreboard_pressed() && platform::foreground_game() {
                 let mut board = board.lock().unwrap();
                 board.shown = !board.shown;
                 ctx.request_repaint();
             }
+            if held != platform::scoreboard_held() { ctx.request_repaint(); }
             std::thread::sleep(Duration::from_millis(30));
         });
     });
@@ -97,21 +109,21 @@ pub fn show_ranks(ctx: &egui::Context, preferences: &Preferences, board: Arc<Mut
         return;
     }
     let tab = preferences.rank_tab;
-    if tab { watch_scoreboard(ctx, board.clone()); }
+    watch_scoreboard(ctx, board.clone());
+    show_scoreboard(ctx, board.clone());
     if tab && !editing && !board.lock().unwrap().shown {
         platform::overlay_visibility(RANK_TITLE, false);
         return;
     }
     let scale = ctx.pixels_per_point();
     let bounds = platform::game_bounds().unwrap_or([0., 0., 1280. * scale, 860. * scale]);
-    let lobby = board.lock().unwrap().lobby.len() as f32;
-    let height = rows.len() as f32 * 40. + lobby * 22. + if lobby > 0. { 8. } else { 0. } + if editing { 30. } else { 8. };
+    let height = rows.len() as f32 * 40. + if editing { 30. } else { 8. };
     let position = rank_position(preferences, bounds, scale, height);
     let builder = egui::ViewportBuilder::default()
         .with_title(RANK_TITLE)
         .with_decorations(false)
         .with_transparent(true)
-        .with_inner_size([if lobby > 0. { 250. } else { 170. }, height])
+        .with_inner_size([170., height])
         .with_position(position)
         .with_resizable(false)
         .with_taskbar(false)
@@ -136,17 +148,6 @@ pub fn show_ranks(ctx: &egui::Context, preferences: &Preferences, board: Arc<Mut
                     ui.label(RichText::new(format!("[{mmr}]")).size(19.).strong().color(design::GREEN()));
                 });
             }
-            if !board.lobby.is_empty() {
-                ui.add_space(6.);
-                for (name, team, mmr) in &board.lobby {
-                    ui.horizontal(|ui| {
-                        let color = if *team == 0 { Color32::from_rgb(80, 160, 255) } else { Color32::from_rgb(255, 150, 60) };
-                        ui.label(RichText::new("●").size(11.).color(color));
-                        ui.add_sized([52., 18.], egui::Label::new(RichText::new(mmr).size(15.).strong().color(design::GREEN())));
-                        ui.add(egui::Label::new(RichText::new(name).size(13.).color(Color32::from_rgb(225, 230, 238))).truncate());
-                    });
-                }
-            }
             if editing {
                 ui.label(RichText::new("Arrastra para mover").size(10.).color(design::MUTED()));
                 if ui.interact(ui.max_rect(), ui.id().with("drag"), egui::Sense::drag()).drag_started() {
@@ -155,6 +156,67 @@ pub fn show_ranks(ctx: &egui::Context, preferences: &Preferences, board: Arc<Mut
                 if let Some(rect) = ctx.input(|i| i.viewport().outer_rect) {
                     placement.lock().unwrap().dragged = Some([rect.min.x, rect.min.y]);
                 }
+            }
+        });
+    });
+}
+
+/// Scoreboard row centres at 1080p, measured on the game's own Tab scoreboard (1v1): blue row 1 at -42 px from the
+/// vertical centre, orange row 1 at +86; each extra player adds one row pitch and grows the board around the centre.
+/// shortcut: pitch measured only for 1v1 (assumed 50 px); calibrate with a 2v2/3v3 screenshot if rows drift.
+const ROW_PITCH: f32 = 50.;
+pub fn scoreboard_rows(rows: &[LobbyRow]) -> Vec<(&LobbyRow, f32)> {
+    let size = rows.iter().filter(|r| r.team == 0).count().max(rows.iter().filter(|r| r.team == 1).count()).max(1) as f32;
+    let mut out = Vec::new();
+    for team in [0, 1] {
+        let mut members: Vec<&LobbyRow> = rows.iter().filter(|r| r.team == team).collect();
+        members.sort_by(|a, b| b.score.cmp(&a.score));
+        for (i, row) in members.into_iter().enumerate() {
+            let first = if team == 0 { -42. - (size - 1.) * ROW_PITCH } else { 86. };
+            out.push((row, first + i as f32 * ROW_PITCH));
+        }
+    }
+    out
+}
+
+/// While the scoreboard button is held in a ranked match: rank icon left of each player's photo, MMR after the name.
+fn show_scoreboard(ctx: &egui::Context, board: Arc<Mutex<RankBoard>>) {
+    let visible = !board.lock().unwrap().lobby.is_empty() && platform::scoreboard_held() && platform::foreground_game();
+    let Some(bounds) = platform::game_bounds().filter(|_| visible) else {
+        platform::overlay_visibility(BOARD_TITLE, false);
+        return;
+    };
+    let scale = ctx.pixels_per_point();
+    let builder = egui::ViewportBuilder::default()
+        .with_title(BOARD_TITLE)
+        .with_decorations(false)
+        .with_transparent(true)
+        .with_inner_size([(bounds[2] - bounds[0]) / scale, (bounds[3] - bounds[1]) / scale])
+        .with_position(egui::pos2(bounds[0] / scale, bounds[1] / scale))
+        .with_resizable(false)
+        .with_taskbar(false)
+        .with_active(false)
+        .with_mouse_passthrough(true)
+        .with_window_level(egui::WindowLevel::AlwaysOnTop)
+        .with_visible(true);
+    ctx.show_viewport_deferred(egui::ViewportId::from_hash_of("swapprism-scoreboard"), builder, move |ctx, _| {
+        ctx.request_repaint_after(Duration::from_millis(100));
+        platform::transparent_overlay(BOARD_TITLE, false);
+        let show = !board.lock().unwrap().lobby.is_empty() && platform::scoreboard_held() && platform::foreground_game();
+        platform::overlay_visibility(BOARD_TITLE, show);
+        egui::CentralPanel::default().frame(egui::Frame::new().fill(Color32::TRANSPARENT)).show(ctx, |ui| {
+            let area = ui.max_rect();
+            let s = area.height() / 1080.;
+            let centre = area.center();
+            let board = board.lock().unwrap();
+            for (row, y) in scoreboard_rows(&board.lobby) {
+                let y = centre.y + y * s;
+                let icon = egui::Rect::from_center_size(egui::pos2(centre.x - 557. * s, y), Vec2::splat(42. * s));
+                crate::ranks::rank_icon(ui, icon, row.tier);
+                let at = egui::pos2(centre.x - 257. * s, y);
+                // Near-black shadow (pure black is the transparent colour key).
+                ui.painter().text(at + Vec2::splat(1.5 * s), egui::Align2::LEFT_CENTER, &row.mmr, egui::FontId::proportional(24. * s), Color32::from_rgb(12, 12, 14));
+                ui.painter().text(at, egui::Align2::LEFT_CENTER, &row.mmr, egui::FontId::proportional(24. * s), Color32::WHITE);
             }
         });
     });
@@ -405,4 +467,21 @@ impl App {
 }
 fn profile_url_ok(name: &str) -> bool {
     crate::tracker::profile_url(name).is_ok()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    fn row(team: i64, score: i64) -> LobbyRow { LobbyRow { name: format!("{team}-{score}"), team, score, mmr: String::new(), tier: 0 } }
+    #[test]
+    fn one_v_one_matches_measured_rows() {
+        let rows = [row(0, 0), row(1, 0)];
+        assert_eq!(scoreboard_rows(&rows).iter().map(|r| r.1).collect::<Vec<_>>(), vec![-42., 86.]);
+    }
+    #[test]
+    fn rows_follow_score_order() {
+        let rows = [row(0, 10), row(0, 300), row(1, 5)];
+        let order: Vec<_> = scoreboard_rows(&rows).iter().map(|r| (r.0.score, r.1)).collect();
+        assert_eq!(order, vec![(300, -92.), (10, -42.), (5, 86.)]);
+    }
 }

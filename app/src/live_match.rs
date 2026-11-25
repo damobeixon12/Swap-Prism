@@ -6,8 +6,8 @@ use std::time::Duration;
 #[derive(Default)]
 pub struct LiveMatch {
     pub playlist: i64,
-    /// (name, PrimaryId such as "Epic|id|0", team)
-    pub players: Vec<(String, String, i64)>,
+    /// (name, PrimaryId such as "Epic|id|0", team, score)
+    pub players: Vec<(String, String, i64, i64)>,
     /// Bumped when a match ends, so ratings are read again with the result applied.
     pub ended: u64,
 }
@@ -21,7 +21,7 @@ pub fn apply(state: &mut LiveMatch, message: &Value) {
         "UpdateState" => {
             state.playlist = data["Game"]["PlaylistId"].as_i64().unwrap_or(0);
             state.players = data["Players"].as_array().into_iter().flatten().filter_map(|p| {
-                Some((p["Name"].as_str()?.to_owned(), p["PrimaryId"].as_str().unwrap_or("").to_owned(), p["TeamNum"].as_i64().unwrap_or(0)))
+                Some((p["Name"].as_str()?.to_owned(), p["PrimaryId"].as_str().unwrap_or("").to_owned(), p["TeamNum"].as_i64().unwrap_or(0), p["Score"].as_i64().unwrap_or(0)))
             }).collect();
         }
         "MatchEnded" => state.ended += 1,
@@ -53,9 +53,9 @@ mod tests {
     #[test]
     fn reads_players_and_end() {
         let mut state = LiveMatch::default();
-        let update = serde_json::json!({"Event":"UpdateState","Data":r#"{"Players":[{"Name":"a.","PrimaryId":"Epic|x|0","TeamNum":1}],"Game":{"PlaylistId":11}}"#});
+        let update = serde_json::json!({"Event":"UpdateState","Data":r#"{"Players":[{"Name":"a.","PrimaryId":"Epic|x|0","TeamNum":1,"Score":30}],"Game":{"PlaylistId":11}}"#});
         apply(&mut state, &update);
-        assert_eq!((state.playlist, state.players.clone()), (11, vec![("a.".into(), "Epic|x|0".into(), 1)]));
+        assert_eq!((state.playlist, state.players.clone()), (11, vec![("a.".into(), "Epic|x|0".into(), 1, 30)]));
         apply(&mut state, &serde_json::json!({"Event":"MatchEnded","Data":"{}"}));
         assert_eq!(state.ended, 1);
         apply(&mut state, &serde_json::json!({"Event":"MatchDestroyed","Data":"{}"}));

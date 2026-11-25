@@ -13,6 +13,18 @@ pub fn parse_mmr(result:&str)->Vec<(i64,String)>{
     out
 }
 
+/// Per ranked playlist on another player's Tracker page: rating and rank name from the playlists list ("Ranked Duel 1v1 / 521 / … / Gold II Div II").
+const LOBBY_SCRIPT:&str=r#"(()=>[...document.body.innerText.matchAll(/Ranked (Duel 1v1|Doubles 2v2|Standard 3v3)\n([\d.,]+)\n(?:[^\n]*\n){0,3}?(Supersonic Legend|Grand Champion I{1,3}|Champion I{1,3}|Diamond I{1,3}|Platinum I{1,3}|Gold I{1,3}|Silver I{1,3}|Bronze I{1,3}|Unranked)/g)].map(m=>[m[1].toUpperCase(),m[2],m[3]]))()"#;
+
+pub fn parse_lobby(result:&str)->Vec<(i64,String,usize)>{
+    let mut out:Vec<(i64,String,usize)>=Vec::new();
+    for(mode,mmr,rank)in serde_json::from_str::<Vec<(String,String,String)>>(result).unwrap_or_default(){
+        let id=match mode.as_str(){"DUEL 1V1"=>10,"DOUBLES 2V2"=>11,"STANDARD 3V3"=>13,_=>continue};
+        if !out.iter().any(|r|r.0==id){out.push((id,mmr.replace([',','.'],""),crate::ranks::tier_index(&rank)));}
+    }
+    out
+}
+
 pub fn profile_url(name:&str)->Result<String,String>{
     let name=name.trim();if name.is_empty()||name.chars().count()>64||name.chars().any(|c|c.is_control()){return Err("Escribe tu nombre de Epic exacto.".into());}
     let encoded:String=name.bytes().map(|b|if b.is_ascii_alphanumeric()||b"-._~".contains(&b){(b as char).to_string()}else{format!("%{b:02X}")}).collect();
@@ -27,42 +39,47 @@ pub fn player_url(name:&str,primary:&str)->Option<String>{
 }
 
 impl App{
-    /// Other players' MMR, read from their Tracker pages in a hidden view: once when they appear and once when the match ends.
+    /// Other players' MMR and rank, read from their Tracker pages in a hidden view: once when they appear and once when the match ends.
     pub(super) fn lobby_tick(&mut self,ctx:&egui::Context,frame:&eframe::Frame){
         if !(self.overlay_preferences.rank&&self.overlay_preferences.rank_lobby){return;}
         crate::live_match::watch(self.live_match.clone());
         ctx.request_repaint_after(Duration::from_secs(3));
         let (playlist,players,ended)={let m=self.live_match.lock().unwrap();(m.playlist,m.players.clone(),m.ended)};
         let me=self.tracker_name.trim().to_lowercase();
-        let others:Vec<_>=players.into_iter().filter(|p|p.0.to_lowercase()!=me).collect();
-        if others.is_empty()||![10,11,13].contains(&playlist){
+        // Diagnostics for in-game checks: what the Stats API gave and what Tracker answered.
+        let debug=json!({"playlist":playlist,"players":players,"queue":self.lobby_queue,"results":*self.lobby_results.lock().unwrap(),"webview":self.lobby_web.is_some(),"current":self.lobby_current.as_ref().map(|c|c.0.clone())}).to_string();
+        if !players.is_empty()&&debug!=self.lobby_debug{let _=fs::write(self.root.join("data/lobby-debug.json"),&debug);self.lobby_debug=debug;}
+        if players.is_empty()||![10,11,13].contains(&playlist){
             self.rank_board.lock().unwrap().lobby.clear();
-            if others.is_empty(){self.lobby_asked.clear();self.lobby_queue.clear();let mut r=self.lobby_results.lock().unwrap();if r.len()>200{r.clear();}}
+            if players.is_empty(){self.lobby_asked.clear();self.lobby_queue.clear();let mut r=self.lobby_results.lock().unwrap();if r.len()>200{r.clear();}}
             return;
         }
         // The window is usually minimized while playing: keep ticking so lookups advance.
         ctx.request_repaint_after(Duration::from_secs(1));
         if ended!=self.lobby_ended{self.lobby_ended=ended;self.lobby_asked.clear();}
-        for (name,primary,_) in &others{
-            if self.lobby_asked.contains(name){continue;}
+        for (name,primary,_,_) in &players{
+            if self.lobby_asked.contains(name)||name.to_lowercase()==me{continue;}
             self.lobby_asked.push(name.clone());
-            match player_url(name,primary){Some(url)=>self.lobby_queue.push((name.clone(),url)),None=>self.lobby_results.lock().unwrap().push((name.clone(),"—".into()))}
+            match player_url(name,primary){Some(url)=>self.lobby_queue.push((name.clone(),url)),None=>self.lobby_results.lock().unwrap().push((name.clone(),"—".into(),0))}
         }
         {
             let results=self.lobby_results.lock().unwrap();
-            let mut lobby:Vec<(String,i64,String)>=others.iter().map(|(n,_,t)|(n.clone(),*t,results.iter().rev().find(|r|&r.0==n).map(|r|r.1.clone()).unwrap_or("…".into()))).collect();
-            lobby.sort_by_key(|p|p.1);
-            self.rank_board.lock().unwrap().lobby=lobby;
+            let mut board=self.rank_board.lock().unwrap();
+            let mine=(board.mmr.iter().find(|m|m.0==playlist).map(|m|m.1.clone()).unwrap_or("—".into()),board.tiers.iter().find(|t|t.0==playlist).map(|t|t.1).unwrap_or(0));
+            board.lobby=players.iter().map(|(n,_,team,score)|{
+                let (mmr,tier)=if n.to_lowercase()==me{mine.clone()}else{results.iter().rev().find(|r|&r.0==n).map(|r|(r.1.clone(),r.2)).unwrap_or(("…".into(),0))};
+                crate::overlay::LobbyRow{name:n.clone(),team:*team,score:*score,mmr,tier}
+            }).collect();
         }
         let now=Instant::now();
         if let Some((name,started,asked,before))=self.lobby_current.clone(){
             let Some(view)=&self.lobby_web else{return};
             let done=self.lobby_results.lock().unwrap().iter().filter(|r|r.0==name).count()>before;
             if done{self.lobby_current=None;}
-            else if now-started>Duration::from_secs(15){if before==0{self.lobby_results.lock().unwrap().push((name,"—".into()));}self.lobby_current=None;}
+            else if now-started>Duration::from_secs(15){if before==0{self.lobby_results.lock().unwrap().push((name,"—".into(),0));}self.lobby_current=None;}
             else if now-started>Duration::from_secs(5)&&now-asked>Duration::from_secs(2){
                 let results=self.lobby_results.clone();
-                let _=view.evaluate_script_with_callback(MMR_SCRIPT,move|r|{if let Some(m)=parse_mmr(&r).into_iter().find(|m|m.0==playlist){results.lock().unwrap().push((name.clone(),m.1));}});
+                let _=view.evaluate_script_with_callback(LOBBY_SCRIPT,move|r|{if let Some(m)=parse_lobby(&r).into_iter().find(|m|m.0==playlist){results.lock().unwrap().push((name.clone(),m.1,m.2));}});
                 if let Some(c)=self.lobby_current.as_mut(){c.2=now;}
             }
             return;
@@ -77,7 +94,7 @@ impl App{
                 .with_navigation_handler(|url|url.starts_with("https://rocketleague.tracker.network/")||url.starts_with("https://tracker.gg/")||url=="about:blank")
                 .with_new_window_req_handler(|_,_|wry::NewWindowResponse::Deny)
                 .build_as_child(frame);
-            match view{Ok(view)=>self.lobby_web=Some(view),Err(_)=>{self.overlay_preferences.rank_lobby=false;return;}}
+            match view{Ok(view)=>self.lobby_web=Some(view),Err(e)=>{let _=fs::write(self.root.join("data/lobby-debug.json"),format!("webview: {e}"));self.overlay_preferences.rank_lobby=false;return;}}
         }else if let Some(view)=&self.lobby_web{let _=view.load_url(&url);}
         let before=self.lobby_results.lock().unwrap().iter().filter(|r|r.0==name).count();
         self.lobby_current=Some((name,now,now,before));
@@ -155,6 +172,7 @@ impl App{
 #[cfg(test)]mod tests{use super::*;
  #[test]fn epic_path_preserves_final_dot(){assert!(profile_url("example.").unwrap().ends_with("/example./overview"));}
  #[test]fn reads_tracker_ratings(){assert_eq!(parse_mmr(r#"[["DUEL 1V1","1,683"],["DOUBLES 2V2","2.668"],["HOOPS","9"],["DUEL 1V1","7"]]"#),vec![(10,"1683".into()),(11,"2668".into())]);assert!(parse_mmr("null").is_empty());}
+ #[test]fn reads_lobby_rank(){assert_eq!(parse_lobby(r#"[["DUEL 1V1","1,521","Gold II"],["DOUBLES 2V2","900","Unranked"],["DUEL 1V1","1","Bronze I"]]"#),vec![(10,"1521".into(),8),(11,"900".into(),0)]);}
  #[test]fn lobby_urls_by_platform(){
   assert!(player_url("a b","Epic|x|0").unwrap().ends_with("/profile/epic/a%20b/overview"));
   assert!(player_url("n","Steam|7656|0").unwrap().ends_with("/profile/steam/7656/overview"));

@@ -5,6 +5,8 @@ pub const MODES:[(i64,&str);7]=[(10,"1v1 · Duel"),(11,"2v2 · Doubles"),(13,"3v
 const TIERS:[&str;23]=["Sin rango","Bronze I","Bronze II","Bronze III","Silver I","Silver II","Silver III","Gold I","Gold II","Gold III","Platinum I","Platinum II","Platinum III","Diamond I","Diamond II","Diamond III","Champion I","Champion II","Champion III","Grand Champion I","Grand Champion II","Grand Champion III","Supersonic Legend"];
 pub fn mode_label(id:i64)->&'static str{MODES.iter().find(|(key,_)|*key==id).map(|(_,label)|*label).unwrap_or("Modalidad")}
 pub fn tier_label(tier:usize)->&'static str{TIERS[tier.min(22)]}
+/// Tier from an English rank name as Tracker writes it ("Gold II"); unknown names are unranked.
+pub fn tier_index(name:&str)->usize{TIERS.iter().position(|t|*t==name).unwrap_or(0)}
 // A deliberately local simulation scale; never used to interpret real Tracker data.
 const VISUAL_MMR:[i64;23]=[0,0,100,160,220,280,340,400,460,520,580,640,700,760,840,920,1000,1100,1200,1300,1500,1700,1900];
 fn visual_tier(mmr:i64)->usize{(1..23).rev().find(|&i|mmr>=VISUAL_MMR[i]).unwrap_or(1)}
