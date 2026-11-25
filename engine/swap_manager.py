@@ -65,7 +65,7 @@ def verify_files(game,folder):
         if path.suffix.lower() not in {'.upk','.bnk'}:continue
         if is_epic_original(cooked,path.name) is not False:continue
         entry=tracked.get(path.name.casefold())
-        if entry and entry.get('status')=='installed' and sha(path)==entry.get('installed_sha256'):continue  # our own change
+        if entry and sha(path)==entry.get('installed_sha256'):continue  # our own change (status may say restored under a profile layer)
         modified.append(path.name)
     return {'epic':True,'healed':healed,'modified':modified,'state':inspect_state(folder)}
 
@@ -228,6 +228,9 @@ def restore_all(folder,names=None):
                 entry['status']='restored';entry['reload_status']='reset-by-launcher'
                 continue
             raise ValueError(MODIFIED.format(name))
+        want=epic_manifest.expected(target.parent.parent.parent,name)
+        if want and epic_manifest.sha1(backup)!=want:
+            raise ValueError(MODIFIED.format(name))  # never write a bad old backup as "original"
         require_editable()
         shutil.copyfile(backup,target)
         if sha(target)!=entry['original_sha256']:

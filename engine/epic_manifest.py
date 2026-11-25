@@ -61,13 +61,3 @@ def sha1(path):
         for block in iter(lambda:stream.read(1024*1024),b''):digest.update(block)
     return digest.hexdigest()
 
-
-def check(game,names):
-    """{package: 'original'|'modified'|'missing'|'unknown'} for files in TAGame/CookedPCConsole."""
-    cooked=Path(game)/'TAGame/CookedPCConsole';result={}
-    for name in names:
-        target=cooked/name;want=expected(game,name)
-        if not target.exists():result[name]='missing'
-        elif want is None:result[name]='unknown'
-        else:result[name]='original' if sha1(target)==want else 'modified'
-    return result

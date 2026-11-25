@@ -163,3 +163,21 @@ class EpicManifestBaseline(unittest.TestCase):
         self.bad_backup_state();state=swaps.load_state(self.state);state[self.name]['status']='installed';swaps.write_state(self.state,state)
         self.assertEqual(swaps.restore_all(self.state),0)
         self.assertEqual(self.target.read_bytes(),b'epic-original')
+
+    def test_verify_files_separates_own_reset_and_foreign_changes(self):
+        swaps.write_state(self.state,{})
+        own=self.cooked/'own_SF.upk';own.write_bytes(b'ours');foreign=self.cooked/'other_SF.upk';foreign.write_bytes(b'theirs')
+        backup=self.bad_backup_state();state=swaps.load_state(self.state);state[self.name]['status']='installed'
+        state['own_SF.upk']={'target':str(own),'backup':str(backup),'original_sha256':'x','installed_sha256':swaps.sha(own),'status':'restored'}
+        swaps.write_state(self.state,state)
+        expected=lambda game,name:swaps.epic_manifest.sha1(self.target) if name==self.name else 'epic'
+        with patch('epic_manifest.expected',side_effect=expected),patch('epic_manifest.find',return_value=Path('m')):
+            result=swaps.verify_files(self.cooked.parent.parent,self.state)
+        self.assertEqual(result['healed'],[self.name])
+        self.assertEqual(result['modified'],['other_SF.upk'])
+
+    def test_restore_refuses_a_backup_that_is_not_epic_original(self):
+        backup=self.bad_backup_state();self.target.write_bytes(b'installed')
+        state=swaps.load_state(self.state);state[self.name].update(status='installed',installed_sha256=swaps.sha(self.target));swaps.write_state(self.state,state)
+        with self.assertRaisesRegex(ValueError,'Verificar archivos'):swaps.restore_all(self.state)
+        self.assertEqual(self.target.read_bytes(),b'installed')
