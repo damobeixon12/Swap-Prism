@@ -19,7 +19,67 @@ pub fn profile_url(name:&str)->Result<String,String>{
     Ok(format!("https://rocketleague.tracker.network/rocket-league/profile/epic/{encoded}/overview"))
 }
 
+/// Tracker page of another player from the Stats API PrimaryId; Steam is keyed by id, the rest by name. Bots have none.
+pub fn player_url(name:&str,primary:&str)->Option<String>{
+    let mut parts=primary.split('|');let platform=parts.next()?.to_ascii_lowercase();let id=parts.next().unwrap_or("");
+    let (path,key)=match platform.as_str(){"epic"=>("epic",name),"steam"=>("steam",id),"ps4"|"ps5"|"psn"=>("psn",name),"xboxone"|"xbox"=>("xbl",name),"switch"=>("switch",name),_=>return None};
+    profile_url(key).ok().map(|u|u.replacen("/profile/epic/",&format!("/profile/{path}/"),1))
+}
+
 impl App{
+    /// Other players' MMR, read from their Tracker pages in a hidden view: once when they appear and once when the match ends.
+    pub(super) fn lobby_tick(&mut self,frame:&eframe::Frame){
+        if !(self.overlay_preferences.rank&&self.overlay_preferences.rank_lobby){return;}
+        crate::live_match::watch(self.live_match.clone());
+        let (playlist,players,ended)={let m=self.live_match.lock().unwrap();(m.playlist,m.players.clone(),m.ended)};
+        let me=self.tracker_name.trim().to_lowercase();
+        let others:Vec<_>=players.into_iter().filter(|p|p.0.to_lowercase()!=me).collect();
+        if others.is_empty()||![10,11,13].contains(&playlist){
+            self.rank_board.lock().unwrap().lobby.clear();
+            if others.is_empty(){self.lobby_asked.clear();self.lobby_queue.clear();let mut r=self.lobby_results.lock().unwrap();if r.len()>200{r.clear();}}
+            return;
+        }
+        if ended!=self.lobby_ended{self.lobby_ended=ended;self.lobby_asked.clear();}
+        for (name,primary,_) in &others{
+            if self.lobby_asked.contains(name){continue;}
+            self.lobby_asked.push(name.clone());
+            match player_url(name,primary){Some(url)=>self.lobby_queue.push((name.clone(),url)),None=>self.lobby_results.lock().unwrap().push((name.clone(),"—".into()))}
+        }
+        {
+            let results=self.lobby_results.lock().unwrap();
+            let mut lobby:Vec<(String,i64,String)>=others.iter().map(|(n,_,t)|(n.clone(),*t,results.iter().rev().find(|r|&r.0==n).map(|r|r.1.clone()).unwrap_or("…".into()))).collect();
+            lobby.sort_by_key(|p|p.1);
+            self.rank_board.lock().unwrap().lobby=lobby;
+        }
+        let now=Instant::now();
+        if let Some((name,started,asked,before))=self.lobby_current.clone(){
+            let Some(view)=&self.lobby_web else{return};
+            let done=self.lobby_results.lock().unwrap().iter().filter(|r|r.0==name).count()>before;
+            if done{self.lobby_current=None;}
+            else if now-started>Duration::from_secs(15){if before==0{self.lobby_results.lock().unwrap().push((name,"—".into()));}self.lobby_current=None;}
+            else if now-started>Duration::from_secs(5)&&now-asked>Duration::from_secs(2){
+                let results=self.lobby_results.clone();
+                let _=view.evaluate_script_with_callback(MMR_SCRIPT,move|r|{if let Some(m)=parse_mmr(&r).into_iter().find(|m|m.0==playlist){results.lock().unwrap().push((name.clone(),m.1));}});
+                if let Some(c)=self.lobby_current.as_mut(){c.2=now;}
+            }
+            return;
+        }
+        if self.lobby_queue.is_empty(){return;}
+        let (name,url)=self.lobby_queue.remove(0);
+        if self.lobby_web.is_none(){
+            if self.tracker_context.is_none(){self.tracker_context=Some(wry::WebContext::new(Some(self.root.join("data/tracker-browser"))));}
+            let view=wry::WebViewBuilder::new_with_web_context(self.tracker_context.as_mut().unwrap())
+                .with_bounds(wry::Rect{position:wry::dpi::PhysicalPosition::new(0,0).into(),size:wry::dpi::PhysicalSize::new(900u32,700u32).into()})
+                .with_visible(false).with_focused(false).with_url(&url)
+                .with_navigation_handler(|url|url.starts_with("https://rocketleague.tracker.network/")||url.starts_with("https://tracker.gg/")||url=="about:blank")
+                .with_new_window_req_handler(|_,_|wry::NewWindowResponse::Deny)
+                .build_as_child(frame);
+            match view{Ok(view)=>self.lobby_web=Some(view),Err(_)=>{self.overlay_preferences.rank_lobby=false;return;}}
+        }else if let Some(view)=&self.lobby_web{let _=view.load_url(&url);}
+        let before=self.lobby_results.lock().unwrap().iter().filter(|r|r.0==name).count();
+        self.lobby_current=Some((name,now,now,before));
+    }
+
     pub(super) fn tracker_editor(&mut self,ui:&mut egui::Ui){
         ui.heading("Tu rango real");d::muted(ui,"Perfil oficial de Rocket League Tracker. Independiente de tu fake rank local.");
         ui.horizontal_wrapped(|ui|{
@@ -92,5 +152,11 @@ impl App{
 #[cfg(test)]mod tests{use super::*;
  #[test]fn epic_path_preserves_final_dot(){assert!(profile_url("example.").unwrap().ends_with("/example./overview"));}
  #[test]fn reads_tracker_ratings(){assert_eq!(parse_mmr(r#"[["DUEL 1V1","1,683"],["DOUBLES 2V2","2.668"],["HOOPS","9"],["DUEL 1V1","7"]]"#),vec![(10,"1683".into()),(11,"2668".into())]);assert!(parse_mmr("null").is_empty());}
+ #[test]fn lobby_urls_by_platform(){
+  assert!(player_url("a b","Epic|x|0").unwrap().ends_with("/profile/epic/a%20b/overview"));
+  assert!(player_url("n","Steam|7656|0").unwrap().ends_with("/profile/steam/7656/overview"));
+  assert!(player_url("n","PS4|1|0").unwrap().contains("/profile/psn/n/"));
+  assert!(player_url("Bot","Unknown|0|0").is_none());
+ }
  #[test]fn epic_path_is_not_a_url_input(){assert!(profile_url("a/b?#").unwrap().contains("a%2Fb%3F%23"));assert!(profile_url("").is_err());}
 }

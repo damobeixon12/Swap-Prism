@@ -18,6 +18,7 @@ pub struct Preferences {
     pub rank_position: Option<[f32; 2]>,
     pub rank_tab: bool,
     pub rank_anchor: String,
+    pub rank_lobby: bool,
 }
 impl Default for Preferences {
     fn default() -> Self {
@@ -32,6 +33,7 @@ impl Default for Preferences {
             rank_position: None,
             rank_tab: true,
             rank_anchor: "left".into(),
+            rank_lobby: true,
         }
     }
 }
@@ -49,6 +51,8 @@ pub struct RankBoard {
     pub tiers: Vec<(i64, usize)>,
     pub mmr: Vec<(i64, String)>,
     pub shown: bool,
+    /// Other players in a ranked match: (name, team, MMR or "…" while it is read).
+    pub lobby: Vec<(String, i64, String)>,
 }
 pub const RANK_ROWS: [(i64, &str); 3] = [(10, "1v1"), (11, "2v2"), (13, "3v3")];
 pub const RANK_ANCHORS: [(&str, &str); 5] = [("left", "Izquierda"), ("top-left", "Arriba a la izquierda"), ("bottom-left", "Abajo a la izquierda"), ("top-right", "Arriba a la derecha"), ("bottom-right", "Abajo a la derecha")];
@@ -100,13 +104,14 @@ pub fn show_ranks(ctx: &egui::Context, preferences: &Preferences, board: Arc<Mut
     }
     let scale = ctx.pixels_per_point();
     let bounds = platform::game_bounds().unwrap_or([0., 0., 1280. * scale, 860. * scale]);
-    let height = rows.len() as f32 * 40. + if editing { 30. } else { 8. };
+    let lobby = board.lock().unwrap().lobby.len() as f32;
+    let height = rows.len() as f32 * 40. + lobby * 22. + if lobby > 0. { 8. } else { 0. } + if editing { 30. } else { 8. };
     let position = rank_position(preferences, bounds, scale, height);
     let builder = egui::ViewportBuilder::default()
         .with_title(RANK_TITLE)
         .with_decorations(false)
         .with_transparent(true)
-        .with_inner_size([170., height])
+        .with_inner_size([if lobby > 0. { 250. } else { 170. }, height])
         .with_position(position)
         .with_resizable(false)
         .with_taskbar(false)
@@ -130,6 +135,17 @@ pub fn show_ranks(ctx: &egui::Context, preferences: &Preferences, board: Arc<Mut
                     ui.label(RichText::new(*label).size(14.).strong().color(Color32::from_rgb(225, 230, 238)));
                     ui.label(RichText::new(format!("[{mmr}]")).size(19.).strong().color(design::GREEN()));
                 });
+            }
+            if !board.lobby.is_empty() {
+                ui.add_space(6.);
+                for (name, team, mmr) in &board.lobby {
+                    ui.horizontal(|ui| {
+                        let color = if *team == 0 { Color32::from_rgb(80, 160, 255) } else { Color32::from_rgb(255, 150, 60) };
+                        ui.label(RichText::new("●").size(11.).color(color));
+                        ui.add_sized([52., 18.], egui::Label::new(RichText::new(mmr).size(15.).strong().color(design::GREEN())));
+                        ui.add(egui::Label::new(RichText::new(name).size(13.).color(Color32::from_rgb(225, 230, 238))).truncate());
+                    });
+                }
             }
             if editing {
                 ui.label(RichText::new("Arrastra para mover").size(10.).color(design::MUTED()));
@@ -296,6 +312,9 @@ impl App {
                     }
                 });
                 design::muted(ui,"Si coincide con la esquina del contador de FPS, se coloca debajo para no taparlo.");
+                ui.add_space(6.);
+                if ui.checkbox(&mut self.overlay_preferences.rank_lobby,"MMR del resto de jugadores en partidas igualadas").changed(){self.save_overlay();}
+                design::muted(ui,"Se busca su Tracker una vez al empezar y otra al acabar la partida, no durante el juego.");
                 let editing=self.rank_placement.lock().unwrap().editing;
                 if editing{design::muted(ui,"Arrastra el panel a donde quieras (por ejemplo junto a tu nombre) y pulsa Fijar posición.");}
                 ui.add_space(6.);
@@ -305,7 +324,7 @@ impl App {
                     let read=RANK_ROWS.iter().map(|(id,label)|format!("{label} {}",board.mmr.iter().find(|m|m.0==*id).map(|m|m.1.as_str()).unwrap_or("—"))).collect::<Vec<_>>().join("   ");
                     drop(board);
                     design::muted(ui,&format!("Leído de tu Tracker: {read}"));
-                    design::muted(ui,"Se vuelve a leer cada 2 minutos mientras juegas, así que se actualiza solo al acabar cada partida.");
+                    design::muted(ui,"Se actualiza solo al acabar cada partida.");
                 }else{
                     ui.label(RichText::new("Abre Rocket League una vez para detectar tu cuenta de Epic (o escríbela en Tracker > Tracker web).").color(design::RED()));
                 }

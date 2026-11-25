@@ -12,6 +12,7 @@ mod motion;
 mod navigation;
 mod media;
 mod tracker;
+mod live_match;
 mod community;
 mod update_panel;
 mod ranks;
@@ -211,6 +212,13 @@ struct App {
     overlay_preferences: overlay::Preferences,
     overlay_placement: std::sync::Arc<std::sync::Mutex<overlay::Placement>>,
     rank_board: std::sync::Arc<std::sync::Mutex<overlay::RankBoard>>,
+    live_match: std::sync::Arc<std::sync::Mutex<live_match::LiveMatch>>,
+    lobby_web: Option<wry::WebView>,
+    lobby_asked: Vec<String>,
+    lobby_queue: Vec<(String,String)>,
+    lobby_results: std::sync::Arc<std::sync::Mutex<Vec<(String,String)>>>,
+    lobby_current: Option<(String,Instant,Instant,usize)>,
+    lobby_ended: u64,
     rank_placement: std::sync::Arc<std::sync::Mutex<overlay::Placement>>,
     tracker_polled: Option<std::time::Instant>,
     tracker_reloaded: Option<std::time::Instant>,
@@ -330,6 +338,13 @@ impl App {
                 overlay::Placement::default(),
             )),
             rank_board: Default::default(),
+            live_match: Default::default(),
+            lobby_web: None,
+            lobby_asked: Vec::new(),
+            lobby_queue: Vec::new(),
+            lobby_results: Default::default(),
+            lobby_current: None,
+            lobby_ended: 0,
             rank_placement: Default::default(),
             tracker_polled: None,
             tracker_reloaded: None,
@@ -665,6 +680,7 @@ impl eframe::App for App {
         self.render(ctx);
         if self.overlay_preferences.rank{self.rank_tick();}
         self.sync_tracker(ctx,_frame);
+        self.lobby_tick(_frame);
         self.queue_motion(ctx);
         self.capture_design(ctx);
         overlay::show(

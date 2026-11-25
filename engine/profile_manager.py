@@ -9,7 +9,7 @@ from swap_manager import sha,load_state,write_state,pristine,filename,is_epic_or
 from job_progress import report as progress
 
 SCHEMA=1
-CODEC_REVISION=10
+CODEC_REVISION=11
 def load(root):
     path=Path(root)/'data/profile.json'
     if not path.exists():return {'schema':SCHEMA,'settings':{'name':'','avatar':'','banner':''},'packages':{}}

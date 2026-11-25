@@ -150,6 +150,8 @@ def patch_package(pkg,name='',images=None,title=None,avatar=None,rank=None):
     """Return package and exact changed exports; never installs it."""
     name=validate_name(name);flat=pkg.flat();replacements={};movies=set();fields=[];paths=[];features=set()
     avatar=avatar or (images or {}).get('avatar')
+    # The goal replay HUD flags the replayed player as local, which tinted other players' photos black.
+    if pkg.file.name.casefold()=='gfx_replayhud_sf.upk':avatar=None
     if name or title or avatar or rank:
         for i,e in enumerate(pkg.exports):
             if pkg.class_name(e)!='SwfMovie':continue

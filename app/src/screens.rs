@@ -144,7 +144,7 @@ impl App {
     fn toast(&mut self,ctx:&egui::Context){
         if self.status!=self.toast_text{self.toast_text=self.status.clone();self.toast_at=Instant::now();}
         let age=self.toast_at.elapsed().as_secs_f32();
-        let alpha=if self.busy{1.}else{(1.-(age-4.)/0.6).clamp(0.,1.)};
+        let alpha=if self.busy{1.}else{(1.-(age-7.)/0.6).clamp(0.,1.)};
         if alpha<=0.||self.toast_text.is_empty(){return;}
         if alpha<1.||!self.busy{ctx.request_repaint_after(Duration::from_millis(60));}
         egui::Area::new(egui::Id::new("toast")).anchor(egui::Align2::RIGHT_BOTTOM,Vec2::new(-24.,-24.)).order(egui::Order::Foreground).interactable(false).show(ctx,|ui|{

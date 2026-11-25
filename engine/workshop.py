@@ -2,6 +2,7 @@
 from pathlib import Path, PurePosixPath
 import concurrent.futures, hashlib, json, os, shutil, struct, tempfile, uuid, zipfile
 from urllib.request import Request, urlopen
+from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse, urlencode
 from html.parser import HTMLParser
 from swap_manager import sha, pristine, load_state
@@ -28,12 +29,26 @@ def https(url):
         raise ValueError('Fuente de descarga no admitida. Importa el mapa descargado desde su autor.')
     return url
 
-def fetch(url,maximum):
+def fetch(url,maximum,label=None):
     https(url)
-    with urlopen(Request(url,headers={'User-Agent':'SwapPrism/0.23 (map catalog)','Accept':'*/*'}),timeout=30) as r:
-        https(r.url);raw=r.read(maximum+1)
-        if len(raw)>maximum:raise ValueError('Archivo demasiado grande.')
-        return raw
+    try:
+        with urlopen(Request(url,headers={'User-Agent':'SwapPrism/0.23 (map catalog)','Accept':'*/*'}),timeout=30) as r:
+            https(r.url)
+            if label is None:raw=r.read(maximum+1)
+            else:
+                from job_progress import report
+                total=int(r.headers.get('Content-Length') or 0);raw=bytearray()
+                while len(raw)<=maximum:
+                    chunk=r.read(1<<20)
+                    if not chunk:break
+                    raw+=chunk;report('download',len(raw)>>20,total>>20,label)
+                raw=bytes(raw)
+            if len(raw)>maximum:raise ValueError('Archivo demasiado grande.')
+            return raw
+    except HTTPError as e:
+        raise ValueError('Este mapa ya no está disponible en su enlace (error %d). Prueba otro o impórtalo desde la web del autor.'%e.code) from None
+    except (URLError,TimeoutError) as e:
+        raise ValueError('No se pudo descargar: sin conexión o el servidor no responde.') from None
 
 def snapshot(api):
     base=folder(api);data=read(base/'catalog.json',{'maps':[]});library=read(base/'library.json',{})
@@ -125,11 +140,11 @@ def download(api,key,confirmed=False):
     if not item or not item.get('url'):raise ValueError('El mapa no tiene enlace de descarga. Usa Importar.')
     base=folder(api)
     # Public files only; never uses accounts, cookies, or executable downloaders.
-    raw=fetch(item['url'],LIMIT)
+    raw=fetch(item['url'],LIMIT,'Descargando '+item['name'].strip()+' (MB)')
     if not raw.startswith(b'PK') and urlparse(item['url']).hostname=='drive.google.com':
         form=DriveForm();form.feed(raw[:100000].decode('utf8',errors='replace'))
         if form.action=='https://drive.usercontent.google.com/download' and form.fields.get('id') and form.fields.get('confirm'):
-            raw=fetch(form.action+'?'+urlencode(form.fields),LIMIT)
+            raw=fetch(form.action+'?'+urlencode(form.fields),LIMIT,'Descargando '+item['name'].strip()+' (MB)')
     if not raw.startswith(b'PK'):raise ValueError('La fuente no entregó un ZIP directo. Descárgalo desde la web del autor y usa Importar.')
     with tempfile.TemporaryDirectory(dir=base,prefix='download-') as tmp:
         path=Path(tmp)/'map.zip';path.write_bytes(raw);return import_map(api,path,item)
