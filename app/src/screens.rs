@@ -165,7 +165,9 @@ impl App {
         if self.launcher_state.is_null()&&!self.launcher_loading&&!self.busy{self.launcher_loading=true;self.call("launcher_status",json!({"action":"launcher_status","game":self.game}));}
         self.ensure_game_settings();
         egui::ScrollArea::vertical().id_salt("home-scroll").show(ui,|ui|{
-            let width=ui.available_width();let height=(ui.ctx().screen_rect().height()*0.6).clamp(320.,640.);
+            // The cover follows the picture's own proportions, so it is not zoomed into at wide windows.
+            let width=ui.available_width();let screen=ui.ctx().screen_rect().height();
+            let height=self.cover(ui.ctx()).map(|t|width*t.size.y/t.size.x).unwrap_or(screen*0.6).clamp(320.,(screen*0.72).max(320.));
             let(rect,_)=ui.allocate_exact_size(Vec2::new(width,height),egui::Sense::hover());
             self.hero_background(ui,rect);
             // Shade the lower part so text stays readable on any picture.
@@ -199,13 +201,10 @@ impl App {
             if response.clicked(){self.call("launcher_play",json!({"action":"launcher_play","game":self.game}));}
             let steam=self.launcher_state["steam"]==true;let added=self.launcher_state["in_steam"]==true;
             if steam{
-                let link=egui::Rect::from_min_size(egui::pos2(play.left(),play.bottom()+10.),Vec2::new(play.width(),22.));
-                ui.scope_builder(egui::UiBuilder::new().max_rect(link).layout(egui::Layout::top_down(egui::Align::Center)),|ui|{
-                    let text=if added{"Jugar desde Steam"}else{"Añadir a Steam"};
-                    let response=ui.add_enabled(can,egui::Label::new(RichText::new(text).size(14.).color(Color32::from_white_alpha(200))).sense(egui::Sense::click()));
-                    let response=if added{response}else{response.on_hover_text("Steam tiene que estar cerrado del todo.")};
-                    if response.on_hover_cursor(egui::CursorIcon::PointingHand).clicked(){let action=if added{"launcher_steam_play"}else{"launcher_steam_add"};self.call(action,json!({"action":action,"game":self.game}));}
-                });
+                let link=egui::Rect::from_min_size(egui::pos2(play.left()+25.,play.bottom()+12.),Vec2::new(play.width()-50.,36.));
+                let response=pill(ui,link,if added{"Jugar desde Steam"}else{"Añadir a Steam"},egui::FontId::proportional(14.),Color32::from_black_alpha(140),Color32::WHITE,can);
+                let response=if self.running{response.on_hover_text("Rocket League ya está abierto.")}else if self.busy{response.on_hover_text("Espera a que termine lo que está haciendo la app.")}else if added{response.on_hover_text("Abre Steam y lanza Rocket League como juego externo.")}else{response.on_hover_text("Steam tiene que estar cerrado del todo.")};
+                if response.clicked(){let action=if added{"launcher_steam_play"}else{"launcher_steam_add"};self.call(action,json!({"action":action,"game":self.game}));}
             }
             // Change the cover picture, top right.
             let change=egui::Rect::from_min_size(egui::pos2(rect.right()-44.-150.,rect.top()+24.),Vec2::new(150.,32.));
@@ -219,9 +218,14 @@ impl App {
     }
 
     /// The user's cover picture, cropped to fill; a night-sky gradient when there is none.
+    fn cover(&self,ctx:&egui::Context)->Option<egui::load::SizedTexture>{
+        let path=self.config["home_image"].as_str().filter(|p|Path::new(p).is_file())?;
+        match egui::Image::from_uri(format!("file://{path}")).load_for_size(ctx,Vec2::splat(1.)){Ok(egui::load::TexturePoll::Ready{texture})=>Some(texture),_=>None}
+    }
+
     fn hero_background(&self,ui:&egui::Ui,rect:egui::Rect){
-        if let Some(path)=self.config["home_image"].as_str().filter(|p|Path::new(p).is_file()){
-            if let Ok(egui::load::TexturePoll::Ready{texture})=egui::Image::from_uri(format!("file://{path}")).load_for_size(ui.ctx(),rect.size()){
+        {
+            if let Some(texture)=self.cover(ui.ctx()){
                 let k=(rect.width()/texture.size.x).max(rect.height()/texture.size.y);
                 let visible=Vec2::new(rect.width()/k/texture.size.x,rect.height()/k/texture.size.y);
                 ui.painter().image(texture.id,rect,egui::Rect::from_min_size(egui::pos2((1.-visible.x)/2.,(1.-visible.y)/2.),visible),Color32::WHITE);
