@@ -21,8 +21,7 @@ from typing import BinaryIO, Dict, List, Optional, Tuple
 # SWAPPRISM: keep the package codec usable without the optional legacy Tk UI.
 # GUI imports are lazy in main(); the Rust worker never creates this UI.
 
-from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+import aes  # Windows CNG instead of the cryptography package
 
 PACKAGE_FILE_TAG = 0x9E2A83C1
 COMPRESS_NONE = 0x00
@@ -679,15 +678,11 @@ class DecryptionProvider:
 
     @staticmethod
     def decrypt_ecb(key: bytes, data: bytes) -> bytes:
-        cipher = Cipher(algorithms.AES(key), modes.ECB(), backend=default_backend())
-        decryptor = cipher.decryptor()
-        return decryptor.update(data) + decryptor.finalize()
+        return aes.ecb_decrypt(key, data)
 
     @staticmethod
     def encrypt_ecb(key: bytes, data: bytes) -> bytes:
-        cipher = Cipher(algorithms.AES(key), modes.ECB(), backend=default_backend())
-        encryptor = cipher.encryptor()
-        return encryptor.update(data) + encryptor.finalize()
+        return aes.ecb_encrypt(key, data)
 
 
 def find_valid_key(encrypted_path: Path, provider: DecryptionProvider) -> Tuple[FileSummary, FileCompressionMetaData, bytes, bytes]:

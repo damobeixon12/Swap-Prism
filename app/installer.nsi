@@ -1,4 +1,4 @@
-Unicode True
+﻿Unicode True
 !include "MUI2.nsh"
 !include "FileFunc.nsh"
 Var TestMode
@@ -8,6 +8,8 @@ InstallDir "$LOCALAPPDATA\Programs\SWAPPRISM"
 InstallDirRegKey HKCU "Software\SWAPPRISM" "InstallDir"
 RequestExecutionLevel user
 SetCompressor /SOLID lzma
+SetCompressorDictSize 64
+SetDatablockOptimize on
 Icon "assets\swapprism.ico"
 UninstallIcon "assets\swapprism.ico"
 VIProductVersion "0.30.0.0"
@@ -16,7 +18,15 @@ VIAddVersionKey "FileDescription" "Instalador Swap Prism"
 VIAddVersionKey "FileVersion" "0.30.0"
 VIAddVersionKey "LegalCopyright" "Swap Prism"
 !define MUI_ABORTWARNING
-!define MUI_WELCOMEPAGE_TEXT "Instala Swap Prism para tu usuario de Windows.$\r$\n$\r$\nIncluye el motor necesario: no necesitas instalar Python ni Rust.$\r$\n$\r$\nAplicaciÃ³n experimental sin firma digital. No instala controladores ni modifica Rocket League durante la instalaciÃ³n."
+!define MUI_ICON "assets\swapprism.ico"
+!define MUI_UNICON "assets\swapprism.ico"
+!define MUI_WELCOMEFINISHPAGE_BITMAP "assets\installer-side.bmp"
+!define MUI_UNWELCOMEFINISHPAGE_BITMAP "assets\installer-side.bmp"
+!define MUI_HEADERIMAGE
+!define MUI_HEADERIMAGE_RIGHT
+!define MUI_HEADERIMAGE_BITMAP "assets\installer-header.bmp"
+!define MUI_BGCOLOR "FFFFFF"
+!define MUI_WELCOMEPAGE_TEXT "Instala Swap Prism para tu usuario de Windows.$\r$\n$\r$\nIncluye el motor necesario: no necesitas instalar Python ni Rust.$\r$\n$\r$\nAplicación experimental sin firma digital. No instala controladores ni modifica Rocket League durante la instalación."
 !insertmacro MUI_PAGE_WELCOME
 !insertmacro MUI_PAGE_DIRECTORY
 !insertmacro MUI_PAGE_INSTFILES
@@ -101,7 +111,7 @@ Section "Uninstall"
   DeleteRegKey HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\SWAPPRISM"
   ; Never delete data/backups or touch game files while uninstalling.
   IfSilent +2
-  MessageBox MB_OK "AplicaciÃ³n desinstalada. Se conserva $INSTDIR\data con tus copias originales. Los cambios del juego se restauran desde Swap Prism antes de desinstalar."
+  MessageBox MB_OK "Aplicación desinstalada. Se conserva $INSTDIR\data con tus copias originales. Los cambios del juego se restauran desde Swap Prism antes de desinstalar."
 SectionEnd
 
 

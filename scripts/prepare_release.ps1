@@ -19,11 +19,11 @@ $newSettings=$settings | ConvertTo-Json
 if($SkipBuild -and (Get-Content -LiteralPath $settingsPath -Raw | ConvertFrom-Json).update_manifest_url -ne $channel){throw 'El canal cambió. Ejecuta sin -SkipBuild para incorporarlo al instalador.'}
 [IO.File]::WriteAllText($settingsPath,$newSettings,$utf8)
 $installerScript=Join-Path $projectRoot 'app/installer.nsi'
-$nsi=Get-Content -LiteralPath $installerScript -Raw
+$nsi=Get-Content -LiteralPath $installerScript -Raw -Encoding UTF8
 $nsi=$nsi -replace 'VIProductVersion "[^"]+"',('VIProductVersion "'+$releaseVersion+'.0"')
 $nsi=$nsi -replace '(VIAddVersionKey "FileVersion" ")[^"]+',('${1}'+$releaseVersion)
 $nsi=$nsi -replace '("DisplayVersion" ")[^"]+',('${1}'+$releaseVersion)
-[IO.File]::WriteAllText($installerScript,$nsi,$utf8)
+[IO.File]::WriteAllText($installerScript,$nsi,(New-Object System.Text.UTF8Encoding($true))) # NSIS needs the BOM to read UTF-8
 $lockPath=Join-Path $projectRoot 'app/Cargo.lock'
 $lock=Get-Content -LiteralPath $lockPath -Raw
 $lock=$lock -replace '(?m)(name = "swapprism"\r?\nversion = ")[^"]+',('${1}'+$releaseVersion)

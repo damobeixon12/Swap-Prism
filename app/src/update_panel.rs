@@ -12,6 +12,23 @@ impl App{
    Ok(())=>{self.update_waiting=Some(Instant::now());self.update_error.clear();},Err(e)=>self.update_error=e
   }}
  }
+ /// Silent re-check every 30 min; downloads as soon as the app is idle and installs once Rocket League is closed.
+ pub(super) fn auto_update(&mut self,ctx:&egui::Context){
+  ctx.request_repaint_after(Duration::from_secs(60));
+  let url=s(&self.config,"update_manifest_url").to_owned();
+  if !url.is_empty()&&!self.update_checking&&self.available_update.is_none()&&self.update_file.is_none()&&self.update_checked_at.elapsed()>Duration::from_secs(1800){
+   self.update_checked_at=Instant::now();let tx=self.tx.clone();
+   thread::spawn(move||{let _=tx.send(Event::Update(update::check(&url,VERSION)));});
+  }
+  if self.update_auto&&!self.busy&&!self.update_downloading{
+   if let Some(release)=self.available_update.clone(){self.update_auto=false;self.download_update(release);}
+  }
+  if self.update_file.is_some()&&self.update_waiting.is_none()&&!self.busy&&!self.running&&self.update_error.is_empty(){self.start_native_update();}
+ }
+ fn download_update(&mut self,release:update::Release){
+  self.busy=true;self.update_downloading=true;self.update_bytes=0;self.update_total=None;self.update_error.clear();
+  let tx=self.tx.clone();let root=self.root.clone();thread::spawn(move||{let result=update::download_progress(&release,&root,|bytes,total|{let _=tx.send(Event::UpdateBytes(bytes,total));});let _=tx.send(Event::Downloaded(result));});
+ }
  pub(super) fn update_panel(&mut self,ctx:&egui::Context){
   if !self.update_open{return;}
   if let Some(started)=self.update_waiting{
@@ -35,13 +52,11 @@ impl App{
      }else if let Some(release)=self.available_update.clone(){
       ui.label(RichText::new(format!("Versión {} disponible",release.version)).size(19.));
       if let Some(notes)=&release.notes{d::muted(ui,notes);}
-      ui.add_space(10.);if ui.add_enabled(!self.busy&&!self.running,d::button("Actualizar ahora",d::GREEN())).clicked(){
-       self.busy=true;self.update_downloading=true;self.update_bytes=0;self.update_total=None;self.update_error.clear();
-       let tx=self.tx.clone();let root=self.root.clone();thread::spawn(move||{let result=update::download_progress(&release,&root,|bytes,total|{let _=tx.send(Event::UpdateBytes(bytes,total));});let _=tx.send(Event::Downloaded(result));});
-      }
+      ui.add_space(10.);if ui.add_enabled(!self.busy,d::button("Actualizar ahora",d::GREEN())).clicked(){self.update_auto=false;self.download_update(release);}
+      if self.busy{d::muted(ui,"Se descargará sola en cuanto termine lo que está haciendo la app.");}
       if self.running{d::muted(ui,"Cierra Rocket League para instalar la actualización.");}
       d::muted(ui,"Descarga verificada, instalación y reinicio automático.");
-     }else if self.update_file.is_some(){ui.label("Descarga verificada");if ui.add_enabled(!self.busy&&!self.running,d::button("Instalar y reiniciar",d::GREEN())).clicked(){self.start_native_update();}}
+     }else if self.update_file.is_some(){ui.label("Descarga verificada");if self.running{d::muted(ui,"Se instalará sola al cerrar Rocket League.");}if ui.add_enabled(!self.busy&&!self.running,d::button("Instalar y reiniciar",d::GREEN())).clicked(){self.start_native_update();}}
      else{ui.label("Ya tienes la última versión publicada.");}
      if !self.update_error.is_empty(){ui.label(RichText::new(&self.update_error).color(d::RED()));}
      ui.add_space(12.);if !self.update_downloading&&self.update_waiting.is_none()&&ui.button("Cerrar").clicked(){self.update_open=false;}

@@ -4,7 +4,7 @@ Bitmap/shape encoding follows Adobe SWF 10, DefineBitsLossless2/DefineShape3.
 These tags are supported by Scaleform GFx; no external image loader is needed.
 """
 import io,struct,zlib
-from PIL import Image
+from PIL import Image,ImageOps
 from hud_abc import ABC,Reader,encode_u30,swf_tags
 from title_display import _ref
 from fake_display import _getter
@@ -20,14 +20,16 @@ class Bits:
         self.bits.extend([0]*((-len(self.bits))%8))
         return bytes(sum(self.bits[i+j]<<(7-j) for j in range(8)) for i in range(0,len(self.bits),8))
 
+SIDE=128 # source pixels; the shape stays 64 px (1280 twips)
+
 def bitmap_shape(bitmap,shape,raw):
-    with Image.open(io.BytesIO(raw)) as source:image=source.convert('RGBA').resize((64,64),Image.Resampling.LANCZOS)
+    with Image.open(io.BytesIO(raw)) as source:image=ImageOps.fit(source.convert('RGBA'),(SIDE,SIDE),Image.Resampling.LANCZOS)
     pixels=bytearray()
     for r,g,b,a in image.getdata():pixels.extend((a,(r*a+127)//255,(g*a+127)//255,(b*a+127)//255))
-    bitmap_tag=tag(36,struct.pack('<HBHH',bitmap,5,64,64)+zlib.compress(bytes(pixels)))
+    bitmap_tag=tag(36,struct.pack('<HBHH',bitmap,5,SIDE,SIDE)+zlib.compress(bytes(pixels)))
     rect=Bits();rect.put(12,5)
     for value in [0,1280,0,1280]:rect.put(value,12)
-    matrix=Bits();matrix.put(1,1);matrix.put(22,5);matrix.put(20<<16,22);matrix.put(20<<16,22);matrix.put(0,1);matrix.put(0,5)
+    matrix=Bits();matrix.put(1,1);matrix.put(22,5);matrix.put((1280<<16)//SIDE,22);matrix.put((1280<<16)//SIDE,22);matrix.put(0,1);matrix.put(0,5)
     edges=Bits();edges.put(1,4);edges.put(0,4) # one fill index bit, no lines
     edges.put(0,1);edges.put(5,5);edges.put(1,5);edges.put(0,1);edges.put(0,1);edges.put(1,1)
     for vertical,delta in [(False,1280),(True,1280),(False,-1280),(True,-1280)]:

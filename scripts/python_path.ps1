@@ -1,6 +1,6 @@
 ﻿# Devuelve la ruta de Python 3.12 para compilar el motor.
 # Orden: variable SWAPPRISM_PYTHON, runtime de Codex, lanzador py -3.12, python del PATH.
-# El Python elegido necesita Pillow y cryptography (PyInstaller y miniaudio vienen en work/builddeps).
+# El Python elegido necesita Pillow (el cifrado usa Windows; PyInstaller y miniaudio vienen en work/builddeps).
 $ErrorActionPreference='Stop'
 if($env:SWAPPRISM_PYTHON -and (Test-Path -LiteralPath $env:SWAPPRISM_PYTHON)){$env:SWAPPRISM_PYTHON;return}
 $poppler=Get-Command pdftoppm -ErrorAction SilentlyContinue
@@ -20,4 +20,4 @@ if($python){
   $version=& $python.Source -c 'import sys;print("%d.%d"%sys.version_info[:2])' 2>$null
   if($version -eq '3.12'){$python.Source;return}
 }
-throw 'No se encuentra Python 3.12. Instálalo (con Pillow y cryptography) o define SWAPPRISM_PYTHON con su ruta.'
+throw 'No se encuentra Python 3.12. Instálalo (con Pillow) o define SWAPPRISM_PYTHON con su ruta.'

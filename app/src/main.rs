@@ -165,6 +165,8 @@ struct App {
     update_total:Option<u64>,
     update_error:String,
     update_waiting:Option<Instant>,
+    update_auto:bool,
+    update_checked_at:Instant,
     visible: bool,
     started: Instant,
     smoke: Option<PathBuf>,
@@ -278,7 +280,7 @@ impl App {
             available_update: None,
             update_file: None,
             update_sha256: String::new(),
-            update_open:false,update_checking:false,update_downloading:false,update_bytes:0,update_total:None,update_error:String::new(),update_waiting:None,
+            update_open:false,update_checking:false,update_downloading:false,update_bytes:0,update_total:None,update_error:String::new(),update_waiting:None,update_auto:false,update_checked_at:Instant::now(),
             visible: true,
             started,
             smoke,
@@ -612,7 +614,12 @@ impl App {
                 }
                 Event::UpdateBytes(bytes,total)=>{self.update_bytes=bytes;self.update_total=total;},
                 Event::Update(result)=>{self.update_checking=false;match result{
-                    Ok(release)=>{self.available_update=release;if self.available_update.is_some(){self.update_open=true;}self.status=if self.available_update.is_some(){"Hay una actualización disponible."}else{"Ya tienes la última versión publicada."}.into();},
+                    Ok(release)=>{
+                        let found=release.is_some();self.available_update=release;
+                        // Automatic: a new version is downloaded and installed without asking.
+                        if found{self.update_open=true;self.update_auto=true;self.status="Hay una versión nueva: se descarga e instala sola.".into();}
+                        else if self.update_open{self.status="Ya tienes la última versión publicada.".into();}
+                    },
                     Err(error)=>{self.update_error=error.clone();self.status=error;}
                 }},
                 Event::Downloaded(result) => {
@@ -665,6 +672,7 @@ impl eframe::App for App {
             self.overlay_placement.clone(),
         );
         overlay::show_ranks(ctx,&self.overlay_preferences,self.rank_board.clone(),self.rank_placement.clone());
+        self.auto_update(ctx);
         self.update_panel(ctx);
         if let Some((file,frame))=self.shot.as_mut(){
             *frame+=1;ctx.request_repaint();

@@ -6,7 +6,7 @@ then fix the enclosing struct sizes, the object table and the CRC. Every write k
 """
 from pathlib import Path
 import os,shutil,struct,time
-from cryptography.hazmat.primitives.ciphers import Cipher,algorithms,modes
+import aes
 import save_reader as sr
 
 # (object type, path inside it, property type) — names checked against TAGame.upk.
@@ -60,7 +60,7 @@ class Save:
         out=bytearray(self.head)+struct.pack('<i',len(self.data)+4)+self.data+struct.pack('<i',len(self.table))
         for name,pos,index in self.table:out+=sr.write_ue3(name)+struct.pack('<II',pos,index)
         out+=bytes(-len(out)%16)
-        enc=Cipher(algorithms.AES(sr.AES_KEY),modes.ECB()).encryptor();body=enc.update(bytes(out))+enc.finalize()
+        body=aes.ecb_encrypt(sr.AES_KEY,bytes(out))
         return struct.pack('<II',len(body),sr.crc32(body))+body
 
     def span(self,kind):

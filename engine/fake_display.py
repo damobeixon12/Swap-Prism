@@ -182,7 +182,7 @@ def patch_package(pkg,name='',images=None,title=None,avatar=None,rank=None):
             found=[i for i,e in enumerate(pkg.exports) if pkg.class_name(e)=='Texture2D' and pkg.path(i)==allowed[key]]
         if len(found)!=1:raise ValueError('No se localiza la textura exacta del perfil.')
         i=found[0];e=pkg.exports[i];serial=flat[i64(e,36):i64(e,36)+i32(e,32)]
-        replacements[i]=inline_serial(pkg,serial,raw);paths.append(pkg.path(i));features.add(key)
+        replacements[i]=inline_serial(pkg,serial,raw,fit=True);paths.append(pkg.path(i));features.add(key)
     if not replacements:return None,{}
     result=append_exports(pkg,replacements,swf_validator=lambda i,serial:i in movies and serial==replacements[i])
     return result,{'only_client_presentation':True,'other_payloads_unchanged':True,'fields':sorted(set(fields)),'exports':paths,'features':sorted(features),'visual_verified':False}

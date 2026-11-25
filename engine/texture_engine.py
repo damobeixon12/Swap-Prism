@@ -4,7 +4,7 @@ UE3 inline mip research: c1yq/RL-Swapper, MIT. No TFC/physics/process edits.
 """
 from pathlib import Path
 import io,json,struct,zlib,uuid
-from PIL import Image
+from PIL import Image,ImageOps
 from modern_upk import Package,i32,i64,put32,put64,crypt,rewire
 from cosmetic_colors import properties
 from swap_manager import pristine,sha
@@ -94,7 +94,8 @@ def mip_table(data,end):
         except (ValueError,struct.error):pass
     raise ValueError('Mips no reconocidos: no se modifica el paquete.')
 
-def inline_serial(pkg,data,raw):
+def inline_serial(pkg,data,raw,fit=False):
+    """fit=True crops the picture to the texture's proportions instead of stretching it."""
     start,end,props=parse_props(pkg,data); off,tail,levels=mip_table(data,end)
     fmt=next((pkg.names[i32(data,p['value'])] for p in props if p['name']=='Format' and p['size']==8),'')
     if fmt not in ('PF_DXT1','PF_DXT5','PF_A8R8G8B8'):raise ValueError('Formato de textura no admitido: '+fmt)
@@ -105,7 +106,7 @@ def inline_serial(pkg,data,raw):
     sx=next((i32(data,p['value']) for p in props if p['name']=='SizeX'),levels[0][3])
     sy=next((i32(data,p['value']) for p in props if p['name']=='SizeY'),levels[0][4])
     if not 1<=sx<=4096 or not 1<=sy<=4096:raise ValueError('Resolución no admitida.')
-    base=image.resize((sx,sy),Image.Resampling.LANCZOS)
+    base=ImageOps.fit(image,(sx,sy),Image.Resampling.LANCZOS) if fit else image.resize((sx,sy),Image.Resampling.LANCZOS)
     header=bytearray(data[:start]);previous=start;never=False
     for p in props:
         stop=p['value']+p['size']; part=bytearray(data[previous:stop]);rel=p['value']-previous;previous=stop

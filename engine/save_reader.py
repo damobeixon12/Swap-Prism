@@ -7,7 +7,7 @@ import struct
 import sys
 from pathlib import Path
 
-from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+import aes
 
 # ripped from RocketRP AES.cs
 AES_KEY = bytes([
@@ -44,8 +44,7 @@ def crc32(data: bytes, seed: int = CRC_SEED) -> int:
 
 # aes wrappers
 def aes_decrypt(data: bytes) -> bytes:
-    decryptor = Cipher(algorithms.AES(AES_KEY), modes.ECB()).decryptor()
-    return decryptor.update(data) + decryptor.finalize()
+    return aes.ecb_decrypt(AES_KEY, data)
 
 # ue3 string io (int32 len + chars + null).
 def read_ue3(data: bytes, offset: int):

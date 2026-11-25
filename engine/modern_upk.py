@@ -11,7 +11,7 @@ import json
 import struct
 import sys
 import zlib
-from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+import aes
 
 
 def i32(data, offset):
@@ -31,9 +31,9 @@ def put64(data, offset, value):
 
 
 def crypt(key, data, nonce=None, decrypt=False):
-    mode = modes.CTR(nonce + bytes(4)) if nonce is not None else modes.ECB()
-    operation = Cipher(algorithms.AES(key), mode).decryptor() if decrypt else Cipher(algorithms.AES(key), mode).encryptor()
-    return operation.update(data) + operation.finalize()
+    if nonce is not None:
+        return aes.ctr(key, nonce + bytes(4), data)
+    return aes.ecb_decrypt(key, data) if decrypt else aes.ecb_encrypt(key, data)
 
 
 class Package:

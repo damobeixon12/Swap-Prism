@@ -1,7 +1,7 @@
 import struct,tempfile,unittest
 from pathlib import Path
 from unittest.mock import patch
-from cryptography.hazmat.primitives.ciphers import Cipher,algorithms,modes
+import aes
 import game_settings as g, save_reader as sr
 
 def prop(name,tag,raw,size):return sr.write_ue3(name)+sr.write_ue3(tag)+struct.pack('<ii',size,0)+raw
@@ -17,7 +17,7 @@ def fake_save():
     plain=bytes(20)+struct.pack('<i',len(data)+4)+data+struct.pack('<i',2)
     plain+=sr.write_ue3('TAGame.ProfileCameraSave_TA')+struct.pack('<II',cam_pos,0)+sr.write_ue3('TAGame.VideoSettingsSavePC_TA')+struct.pack('<II',vid_pos,1)
     plain+=bytes(-len(plain)%16)
-    enc=Cipher(algorithms.AES(sr.AES_KEY),modes.ECB()).encryptor();body=enc.update(plain)+enc.finalize()
+    body=aes.ecb_encrypt(sr.AES_KEY,plain)
     return struct.pack('<II',len(body),sr.crc32(body))+body
 
 class GameSettingsSave(unittest.TestCase):

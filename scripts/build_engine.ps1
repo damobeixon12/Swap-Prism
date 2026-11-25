@@ -10,7 +10,7 @@ $buildArgs=@('--noconfirm','--onedir','--console','--name','SWAPPRISMEngine',
   '--distpath','work/staging','--workpath','work/pyinstaller-engine','--specpath','work',
   '--exclude-module','tkinter','--exclude-module','numpy','--exclude-module','scipy',
   '--exclude-module','PIL.AvifImagePlugin','--exclude-module','PIL._avif',
-  '--collect-all','cryptography','--collect-all','miniaudio',
+  '--exclude-module','cryptography','--collect-all','miniaudio',
   '--icon',(Join-Path $root 'app/assets/swapprism.ico'))
 foreach($file in @('rl_upk_editor.py','items.json','keys.txt','keys_map.json','catalog_enrichment.json')){
   $buildArgs+=@('--add-data',((Join-Path $root ('engine/motor/'+$file))+';motor'))

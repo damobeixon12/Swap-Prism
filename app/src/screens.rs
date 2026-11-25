@@ -26,7 +26,11 @@ impl App {
                 ui.with_layout(egui::Layout::bottom_up(egui::Align::LEFT),|ui|{
                     ui.horizontal(|ui|{ui.label(RichText::new(format!("v{VERSION}")).size(12.5).color(d::MUTED()));ui.with_layout(egui::Layout::right_to_left(egui::Align::Center),|ui|ui.label(RichText::new("F8 · Mostrar / ocultar").size(12.5).color(d::MUTED())));});
                     ui.horizontal(|ui|{
-                        if ui.add(egui::Label::new(RichText::new("Discord").size(12.5).color(d::MUTED())).sense(egui::Sense::click())).on_hover_cursor(egui::CursorIcon::PointingHand).clicked(){self.go_to("Community");}
+                        // Discord: brand-coloured mark + label, opens the server invite.
+                        let(mark,_)=ui.allocate_exact_size(Vec2::new(22.,18.),egui::Sense::hover());discord_mark(ui.painter(),mark);
+                        let link=ui.add(egui::Label::new(RichText::new("Discord").size(13.).color(d::TEXT())).sense(egui::Sense::click()));
+                        if ui.interact(mark.union(link.rect),egui::Id::new("discord-link"),egui::Sense::click()).on_hover_cursor(egui::CursorIcon::PointingHand).on_hover_text("Únete al Discord de Swap Prism").clicked()||link.clicked(){ctx.open_url(egui::OpenUrl::new_tab(DISCORD));}
+                        ui.add_space(10.);
                         if ui.add_enabled(!self.busy,egui::Label::new(RichText::new("Salir").size(12.5).color(d::MUTED())).sense(egui::Sense::click())).on_hover_cursor(egui::CursorIcon::PointingHand).clicked(){ctx.send_viewport_cmd(egui::ViewportCommand::Close);}
                     });
                 });
@@ -778,6 +782,17 @@ fn pill(ui:&mut egui::Ui,rect:egui::Rect,text:&str,font:egui::FontId,fill:Color3
     ui.painter().rect_filled(rect.expand(hover*2.),rect.height()/2.,fill);
     ui.painter().text(rect.center(),egui::Align2::CENTER_CENTER,text,font,if enabled{color}else{color.gamma_multiply(0.7)});
     if enabled{response.on_hover_cursor(egui::CursorIcon::PointingHand)}else{response}
+}
+
+const DISCORD:&str="https://discord.gg/wdZZGsGfq";
+
+/// Simple Discord-style controller face in the brand blurple, drawn with shapes (no bundled logo file).
+fn discord_mark(painter:&egui::Painter,rect:egui::Rect){
+    let c=rect.center();let blurple=Color32::from_rgb(88,101,242);
+    let body=egui::Rect::from_center_size(c,Vec2::new(19.,14.));
+    painter.rect_filled(body,7.,blurple);
+    painter.circle_filled(c+Vec2::new(-6.,6.),3.5,blurple);painter.circle_filled(c+Vec2::new(6.,6.),3.5,blurple);
+    painter.circle_filled(c+Vec2::new(-3.6,0.),2.,Color32::WHITE);painter.circle_filled(c+Vec2::new(3.6,0.),2.,Color32::WHITE);
 }
 
 /// Vertical colour ramp over a rectangle.
