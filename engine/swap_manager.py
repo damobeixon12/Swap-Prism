@@ -1,0 +1,172 @@
+"""Install/restore validated cosmetic packages, with persistent verified backups."""
+from pathlib import Path
+import hashlib
+import json
+import os
+import shutil
+from menu_guard import require_closed as require_editable
+
+
+def sha(path):
+    digest=hashlib.sha256()
+    with Path(path).open('rb') as stream:
+        for block in iter(lambda:stream.read(1024*1024),b''):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def load_state(folder):
+    path=Path(folder)/'swaps.json'
+    return json.loads(path.read_text(encoding='utf-8')) if path.exists() else {}
+
+
+def write_state(folder,state):
+    folder=Path(folder)
+    folder.mkdir(parents=True,exist_ok=True)
+    temp=folder/'swaps.json.tmp'
+    temp.write_text(json.dumps(state,ensure_ascii=False,indent=2),encoding='utf-8')
+    os.replace(temp,folder/'swaps.json')
+
+
+def inspect_state(folder):
+    """Read current file hashes without rewriting backup/install metadata."""
+    state=load_state(folder)
+    profile_path=Path(folder)/'profile.json'
+    profile=json.loads(profile_path.read_text(encoding='utf8')).get('packages',{}) if profile_path.exists() else {}
+    for name,entry in state.items():
+        try:
+            current=sha(entry['target'])
+            entry['observed_status']=('original' if current==entry.get('original_sha256') else
+                                      'installed' if current==entry.get('installed_sha256') else 'external')
+            layer=profile.get(name,{})
+            if entry['observed_status']=='installed' and current==layer.get('installed_sha256') and layer.get('base_sha256')==entry.get('original_sha256'):
+                entry['observed_status']='original'
+        except (OSError,KeyError):entry['observed_status']='missing'
+    return state
+
+
+def filename(name):
+    if not isinstance(name,str) or '/' in name or '\\' in name or ':' in name or not (name.lower().endswith('.upk') or name in {'SFX_Car_Movements.bnk','SFX_Impacts.bnk'}):
+        raise ValueError('Paquete no válido.')
+    return name
+
+
+def pristine(cooked,name,folder):
+    name=filename(name)
+    target=(Path(cooked)/name).resolve()
+    entry=load_state(folder).get(name)
+    if not entry:
+        return target
+    if target!=Path(entry['target']).resolve():
+        raise ValueError('La instalación no coincide con la copia de seguridad.')
+    backup=Path(entry['backup'])
+    if sha(backup)!=entry['original_sha256']:
+        raise ValueError('La copia original ha cambiado. No se usa.')
+    if sha(target) not in {entry['original_sha256'],entry['installed_sha256']}:
+        raise ValueError('Epic u otro programa ha cambiado el paquete. Verifica los archivos antes de continuar.')
+    return backup
+
+
+def apply_job(job,cooked,folder):
+    gate=require_editable()
+    job,cooked,folder=Path(job),Path(cooked).resolve(),Path(folder)
+    report=json.loads((job/'informe.json').read_text(encoding='utf-8'))
+    name=filename(report['target']['AssetPackage'])
+    validation=report.get('validation',{})
+    hud=validation.get('hud_display_color') or {}
+    verified_hud=(hud.get('only_display_color_references_changed') is True or
+                  (name.casefold() in {'gfx_hud_sf.upk','gfxshell_sf.upk','gfx_replayhud_sf.upk','gfx_spectatorhud_sf.upk'} and hud.get('only_meter_display_methods_changed') is True and
+                   hud.get('label_and_number_textColor_explicit') is True and
+                   set(hud.get('methods',[]))=={'onTeamColorChanged','onBoostChanged','updateBoost'}))
+    if not (validation.get('serialized_payloads_unchanged') is True or
+            (report.get('kind')=='texture' and validation.get('other_payloads_unchanged') is True and
+             (validation.get('texture_and_material_bindings_only') is True or
+              (validation.get('texture_and_hud_display_only') is True and verified_hud and
+               validation.get('hud_display_color',{}).get('boost_amount_calculation_instructions_unchanged') is True) or
+              (name=='GFX_StartMenu_SF.upk' and validation.get('only_start_menu_logo_presentation') is True))) or
+            (report.get('kind')=='body_visual' and validation.get('original_body_physics_data_unchanged') is True and validation.get('only_visual_body_refs_changed') is True) or
+            (report.get('kind')=='body_visual' and validation.get('original_body_physics_fields_unchanged') is True and validation.get('self_contained_visual_dependencies') is True) or
+            (report.get('kind')=='profile' and validation.get('only_client_presentation') is True and validation.get('other_payloads_unchanged') is True) or
+            (report.get('kind')=='studio' and name=='TAGame.upk' and validation.get('only_presentation_color_values') is True and validation.get('physics_and_functions_unchanged') is True) or
+            (report.get('kind')=='sound' and name in {'SFX_Car_Movements.bnk','SFX_Impacts.bnk'} and validation.get('only_verified_audio_media') is True) or
+            (report.get('kind')=='workshop' and name=='Labs_Utopia_P.upk' and validation.get('workshop_map_validated') is True and validation.get('fixed_utopia_retro_only') is True)):
+        raise ValueError('El paquete no tiene la validación requerida.')
+    staged=job/'generado'/name
+    target=(cooked/name).resolve()
+    if target.parent!=cooked:
+        raise ValueError('Destino fuera de la carpeta del juego.')
+    if sha(staged)!=report['generated_sha256']:
+        raise ValueError('El paquete generado ha cambiado.')
+    state=load_state(folder)
+    existing=state.get(name)
+    source=pristine(cooked,name,folder)
+    original_sha=report['original_sha256'][name]
+    if sha(source)!=original_sha:
+        raise ValueError('El original ya no coincide con el usado al generar.')
+    folder.mkdir(parents=True,exist_ok=True)
+    backup=folder/'backups'/name
+    backup.parent.mkdir(exist_ok=True)
+    if not existing:
+        if backup.exists() and sha(backup)!=original_sha:
+            raise ValueError('Ya existe otra copia original distinta; no se sobrescribe.')
+        if not backup.exists():
+            shutil.copy2(target,backup)
+        if sha(backup)!=original_sha:
+            raise ValueError('La copia de seguridad no coincide.')
+    entry={'target':str(target),'backup':str(backup.resolve()),'original_sha256':original_sha,
+           'installed_sha256':report['generated_sha256'],'target_item':report['target'],
+           'donor_item':report['donor'],'game_version':report.get('game_version'),'status':'pending'}
+    entry['color']=report.get('validation',{}).get('color')
+    if report.get('hud_display_companion') is True:entry['hud_display_companion']=True
+    state[name]=entry
+    entry['reload_status']='not-running' if gate.mode=='closed' else 'pending-garage-refresh'
+    write_state(folder,state)
+    copying=False
+    try:
+        require_editable()
+        copying=True
+        shutil.copyfile(staged,target)
+        if sha(target)!=report['generated_sha256']:
+            raise ValueError('La copia instalada no coincide.')
+        entry['status']='restored' if report.get('restore_selection') else 'installed'
+        write_state(folder,state)
+    except Exception:
+        # Roll back only after confirming we still possess a valid original.
+        if copying and sha(backup)==original_sha:
+            require_editable()
+            shutil.copyfile(backup,target)
+            entry['status']='restored-after-error'
+            write_state(folder,state)
+        raise
+    return entry
+
+
+def restore_all(folder,names=None):
+    gate=require_editable()
+    state=load_state(folder)
+    selected=None if names is None else {filename(name) for name in names}
+    if selected is not None and not selected.issubset(state):
+        raise ValueError('El cambio seleccionado no tiene copia registrada.')
+    count=0
+    for name,entry in state.items():
+        if selected is not None and name not in selected:continue
+        target,backup=Path(entry['target']),Path(entry['backup'])
+        if sha(backup)!=entry['original_sha256']:
+            raise ValueError('Copia de seguridad no válida: '+filename(name))
+        current=sha(target)
+        if current==entry['original_sha256']:
+            entry['status']='restored'
+            entry['reload_status']='not-running' if gate.mode=='closed' else 'reload-unconfirmed'
+            continue
+        if current!=entry['installed_sha256']:
+            raise ValueError('El paquete cambió fuera de LocalSkins: '+name)
+        require_editable()
+        shutil.copyfile(backup,target)
+        if sha(target)!=entry['original_sha256']:
+            raise ValueError('No se pudo verificar la restauración: '+name)
+        entry['status']='restored'
+        entry['reload_status']='not-running' if gate.mode=='closed' else 'pending-garage-refresh'
+        count+=1
+        write_state(folder,state)
+    write_state(folder,state)
+    return count

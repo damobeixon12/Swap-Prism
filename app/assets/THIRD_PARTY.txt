@@ -1,0 +1,31 @@
+Swap Prism {VERSION} - compilación local sin firma digital.
+
+Iconos: Lucide y Feather (ISC/MIT), licencia en _engine/licenses/Lucide-LICENSE.txt.
+
+Interfaz: Rust, eframe/egui (MIT/Apache-2.0), rfd (MIT), serde (MIT/Apache-2.0),
+image (MIT/Apache-2.0), sha2 (MIT/Apache-2.0), ureq (MIT/Apache-2.0), native-tls (MIT/Apache-2.0).
+Instalador: NSIS (licencias zlib/libpng y componentes según su distribución).
+Motor empaquetado: Python, PyInstaller (GPL con excepción para distribuir aplicaciones),
+Pillow y cryptography según sus licencias correspondientes.
+c1yq/RL-Swapper: MIT. Licencia incluida en _engine/RL-Swapper_LICENSE.txt.
+Lector de guardados adaptado de nixvio64/RLSaveViewer; tablas de CrunchyRL/RLUPKTools.
+La disponibilidad pública de componentes sin licencia explícita no concede permiso
+de redistribución comercial. Paquete para pruebas privadas; pendiente aclarar esas licencias.
+No se incluyen inventarios, guardados, copias originales del juego ni texturas personales.
+
+
+PresentMon 2.6.0 (MIT), Intel y contribuidores. Licencia incluida en _telemetry/PresentMon-LICENSE.txt.
+
+MP3: miniaudio para Python, Irmen de Jong (MIT), y miniaudio de David Reid
+(opción MIT). CFFI (MIT), pycparser (BSD). Licencias incluidas en el motor.
+vgmstream y wwiser se utilizaron solo como herramientas de análisis y prueba;
+no se distribuyen con la aplicación ni se incluyen sonidos originales del juego.
+Nunito, Google Fonts / autores de Nunito (SIL Open Font License 1.1).
+Fuente incorporada al ejecutable; licencia en _engine/licenses/Nunito-OFL.txt.
+
+Tracker integrado: Wry (MIT/Apache-2.0), licencia MIT en _engine/licenses/Wry-MIT.txt.
+Usa Microsoft Edge WebView2 Runtime instalado en Windows y WebView2Loader.dll.
+Los datos y contenidos del perfil proceden del sitio de Tracker Network.
+Insignias de rango: imágenes nativas de Rocket League / Psyonix, extraídas
+de Startup.upk para la vista previa local. Referencias en app/assets/ranks/sources.json.
+

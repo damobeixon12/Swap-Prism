@@ -1,0 +1,23 @@
+# --- Compilación y cachés locales (se regeneran) ---
+app/target/
+work/
+**/__pycache__/
+*.pyc
+
+# --- Salidas: instalador generado y copia de desarrollo con datos personales ---
+outputs/
+
+# --- Copias del juego, sonidos y diagnósticos: nunca al repositorio ---
+*.upk
+*.bnk
+*.tfc
+*.wem
+*.mp3
+*.wav
+*.log
+
+# --- Sistema / editores ---
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/

@@ -1,0 +1,7 @@
+{
+  "version": "0.11.0",
+  "url": "https://YOUR-DOWNLOAD-HOST/SWAPPRISM-Setup.exe",
+  "sha256": "REPLACE_WITH_SHA256_OF_THE_PUBLISHED_INSTALLER",
+  "notes": "Cambios incluidos en esta versión."
+}
+

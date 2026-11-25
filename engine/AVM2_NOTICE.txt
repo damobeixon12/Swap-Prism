@@ -1,0 +1,9 @@
+AVM2 instruction operand-count metadata
+
+The numeric table in avm2_operands.json was extracted from Adobe avmplus
+core/opcodes.tbl, available at https://github.com/adobe/avmplus.
+The source table carries the Mozilla Public License, version 2.0 notice:
+https://www.mozilla.org/MPL/2.0/
+
+The accompanying bounded reader is used only to validate and locate existing
+instructions. It does not execute ActionScript or inject into a game process.

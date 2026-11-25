@@ -1,0 +1,35 @@
+name: Preparar canal de actualizaciones
+on:
+  release:
+    types: [published]
+permissions:
+  contents: write
+jobs:
+  manifest:
+    if: ${{ !github.event.release.prerelease }}
+    runs-on: windows-latest
+    steps:
+      - name: Generar manifiesto desde el instalador publicado
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference='Stop'
+          $event=Get-Content -LiteralPath $env:GITHUB_EVENT_PATH -Raw | ConvertFrom-Json
+          $release=$event.release
+          $version=$release.tag_name -replace '^v',''
+          if($version -notmatch '^\d+\.\d+\.\d+$'){throw 'La etiqueta debe ser vX.Y.Z.'}
+          $assets=@($release.assets | Where-Object {$_.name -match '^Swap[ .-]Prism-Setup\.exe$'})
+          if($assets.Count -ne 1){throw 'Sube exactamente un instalador Swap-Prism-Setup.exe antes de publicar.'}
+          $asset=$assets[0]
+          gh release download $release.tag_name --repo $env:GITHUB_REPOSITORY --pattern $asset.name --dir $env:RUNNER_TEMP
+          if($LASTEXITCODE -ne 0){throw 'No se pudo descargar el instalador de la release.'}
+          if((Get-Item -LiteralPath (Join-Path $env:RUNNER_TEMP $asset.name)).VersionInfo.FileVersion -ne $version){throw 'La etiqueta no coincide con la versión del instalador.'}
+          $hash=(Get-FileHash -LiteralPath (Join-Path $env:RUNNER_TEMP $asset.name) -Algorithm SHA256).Hash.ToLowerInvariant()
+          $manifest=[ordered]@{version=$version;url=$asset.browser_download_url;sha256=$hash;notes=$release.body}
+          $path=Join-Path $env:RUNNER_TEMP 'update.json'
+          [IO.File]::WriteAllText($path,($manifest|ConvertTo-Json),[Text.UTF8Encoding]::new($false))
+          $existing=@($release.assets | Where-Object {$_.name -eq 'update.json'})
+          if($existing.Count -gt 0){Write-Host 'La release ya incluye update.json; se conserva.';exit 0}
+          gh release upload $release.tag_name $path --repo $env:GITHUB_REPOSITORY
+          if($LASTEXITCODE -ne 0){throw 'No se pudo adjuntar update.json.'}

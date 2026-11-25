@@ -1,0 +1,48 @@
+SWAP PRISM - PUBLICAR UNA VERSION
+
+Repositorio: https://github.com/damobeixon12/Swap-Prism
+
+Los usuarios descargan el INSTALADOR, no todo el proyecto.
+El codigo de GitHub y las versiones instalables son cosas distintas:
+un push del codigo no compila ni actualiza las aplicaciones ya instaladas.
+
+PARA CADA VERSION NUEVA
+1. Haz tus cambios en este mismo proyecto.
+2. Cambia la version de app/Cargo.toml (ejemplo: 0.27.0 a 0.27.1).
+3. Ejecuta Preparar update.cmd. Compila y prepara los archivos automaticamente.
+   Puede tardar mas la primera vez despues de limpiar caches.
+4. Extrae outputs/Swap Prism-Update.zip fuera del proyecto.
+5. En GitHub abre Releases > Draft a new release.
+6. Usa la etiqueta v0.27.1 (la version exacta que hayas compilado).
+7. Sube los dos archivos extraidos: Swap-Prism-Setup.exe y update.json.
+8. Publica como version estable y selecciona Set as latest release.
+
+No sobreescribas una version publicada: incrementa siempre su numero.
+El repositorio y sus Releases deben ser publicos para descargas sin cuenta.
+Si subes tambien .github/workflows/update-manifest.yml al repo, GitHub puede
+generar el manifiesto al publicar una release con un instalador adjunto.
+El asistente local ya genera ese JSON: no necesitas usar el workflow para ello.
+
+QUE VEN TUS USUARIOS
+La app consulta el canal estable al abrirse. Si la version es mayor, muestra
+el logo y Actualizar ahora. Descarga con barra y bytes reales, comprueba SHA-256,
+instala con progreso y vuelve a abrirse automaticamente en la misma carpeta.
+Durante el reemplazo queda visible la ventana del actualizador nativo.
+Tambien pueden comprobarlo desde Ajustes > Buscar actualizaciones.
+Sus selecciones, bibliotecas y copias de seguridad se conservan.
+Los clientes 0.27/0.28 necesitan instalar manualmente una vez la 0.29.1 o posterior
+para sustituir su lanzador antiguo. Despues usaran el actualizador nativo.
+
+ARCHIVOS PARA COMPARTIR
+outputs/Swap Prism-Setup.exe: instalacion normal.
+outputs/Swap Prism-Update.zip: dos archivos para publicar en Releases.
+outputs/update.json: manifiesto con version, enlace y hash reales del instalador.
+outputs/PUBLICAR-ACTUALIZACION.txt: instrucciones de esta compilacion concreta.
+
+No subas outputs/LocalSkins/data, backups, caches, guardados, texturas o sonidos
+personales al repositorio. .gitignore evita incluir las rutas mas habituales.
+El usuario autorizo y se publicaron las versiones 0.28.0 y 0.29.1. Las futuras
+publicaciones siguen siendo un paso explicito en GitHub Releases.
+
+Sobre GitHub Releases:
+https://docs.github.com/en/repositories/releasing-projects-on-github/managing-releases-in-a-repository
