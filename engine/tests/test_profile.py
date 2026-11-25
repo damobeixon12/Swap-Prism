@@ -98,6 +98,9 @@ class PartialProfileRebuild(unittest.TestCase):
         del self.profile['packages']['GFX_A.upk']['features']
         self.assertIsNone(profile._unaffected(self.cooked,self.settings(title={'text':'X','target':'XP'}),self.profile))
 
+    def test_first_banner_keeps_every_menu_package(self):
+        self.assertEqual(profile._unaffected(self.cooked,self.settings(banner='x.png'),self.profile),{'GFX_A.upk','GFX_B.upk'})
+
     def test_package_reset_by_launcher_is_rebuilt(self):
         (self.cooked/'GFX_A.upk').write_bytes(b'epic-original')
         self.assertEqual(profile._unaffected(self.cooked,self.settings(title={'text':'X','target':'XP'}),self.profile),set())

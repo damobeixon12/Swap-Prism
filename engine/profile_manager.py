@@ -76,13 +76,20 @@ def _unaffected(cooked,settings,profile):
     old=profile.get('settings',{});changed={k for k in SECTIONS if settings.get(k)!=old.get(k)}
     packages=profile.get('packages',{})
     if (not changed or profile.get('codec_revision')!=CODEC_REVISION or profile.get('partial') or not packages
-            or any(not old.get(k) for k in changed) or any('features' not in e for e in packages.values())):
+            or any(not old.get(k) for k in changed-{'banner'}) or any('features' not in e for e in packages.values())):
         return None
     return {n for n,e in packages.items() if not set(e['features'])&changed and sha(cooked/n)==e['installed_sha256']}
 
-def _generate(api,game,settings,profile):
+def equipped_banner(api):
+    """Package of the banner equipped on the account, from the local save."""
+    from player_inventory import load_snapshot
+    snap=load_snapshot(api.read_database(api.DEFAULT_ENGINE))
+    return next((r.get('AssetPackage') for r in snap.account_equipped if r.get('Slot')=='Player Banner' and r.get('AssetPackage')),None)
+
+def _generate(api,game,settings,profile,banner_package=None):
     cooked=Path(game)/'TAGame/CookedPCConsole'
     keep=_unaffected(cooked,settings,profile)
+    if keep is not None and banner_package!=profile.get('banner_package'):keep-={profile.get('banner_package')}
     names=set(profile['packages'])
     if settings['name'] or settings.get('title') or settings['avatar'] or settings.get('rank'):
         names.update(p.name for p in cooked.glob('*.upk') if p.name.lower().startswith('gfx') and 'sounds' not in p.name.lower())
@@ -90,9 +97,12 @@ def _generate(api,game,settings,profile):
     # Startup contains the shared components/code loaded by the other menus.
     if settings['name'] or settings.get('title') or settings.get('rank'):names.add('Startup.upk')
     if keep is not None:names=set(profile['packages'])-keep
+    if settings['banner']:
+        names.add('Startup.upk')
+        if banner_package and (cooked/banner_package).is_file():names.add(banner_package)
     images={k:Path(settings[k]).read_bytes() for k in ['avatar','banner'] if settings[k]}
     folder=api.ROOT/'paquetes'/('perfil-'+uuid.uuid4().hex);folder.mkdir(parents=True)
-    jobs=[];new={'schema':SCHEMA,'codec_revision':CODEC_REVISION,'settings':settings,'packages':{n:profile['packages'][n] for n in keep or ()}}
+    jobs=[];new={'schema':SCHEMA,'codec_revision':CODEC_REVISION,'settings':settings,'banner_package':banner_package if settings['banner'] else None,'packages':{n:profile['packages'][n] for n in keep or ()}}
     from concurrent.futures import ThreadPoolExecutor,as_completed
     def prepare_one(name):
         require_closed();filename(name);original=pristine(cooked,name,api.ROOT/'data')
@@ -104,7 +114,7 @@ def _generate(api,game,settings,profile):
         # Archive by the original package name; never feed a renamed UPK to codecs.
         base,digest=_archive(api.ROOT,source)
         pkg=Package(source,api.DEFAULT_ENGINE)
-        raw,validation=patch_package(pkg,settings['name'],images if name=='Startup.upk' else None,settings.get('title'),images.get('avatar'),settings.get('rank'))
+        raw,validation=patch_package(pkg,settings['name'],images if name=='Startup.upk' else {'banner':images['banner']} if name==banner_package and 'banner' in images else None,settings.get('title'),images.get('avatar'),settings.get('rank'))
         if raw is None:
             if name not in profile['packages']:return None
             raw=source.read_bytes();validation={'only_client_presentation':True,'other_payloads_unchanged':True,'exports':[]}
@@ -138,12 +148,13 @@ def prepare(api,game,settings):
         if settings['title']['target'] not in owned:raise ValueError('El título original no aparece en tu inventario guardado.')
         equipped=next((r['Product'] for r in snap.account_equipped if r.get('Slot')=='Player Title'),'')
         if settings['title']['target']!=equipped:raise ValueError('Equipa el título original elegido en Rocket League y ciérralo antes de aplicar.')
-    if profile.get('codec_revision')==CODEC_REVISION and not profile.get('partial') and settings==profile['settings']:
+    banner_package=equipped_banner(api) if settings.get('banner') else None
+    if profile.get('codec_revision')==CODEC_REVISION and not profile.get('partial') and settings==profile['settings'] and banner_package==profile.get('banner_package'):
         cooked=Path(game)/'TAGame/CookedPCConsole'
         if all(sha(cooked/name)==entry['installed_sha256'] for name,entry in profile['packages'].items()):
             progress('done',1,1,'El perfil ya estaba aplicado.')
             return [],profile
-    return _generate(api,game,settings,profile)
+    return _generate(api,game,settings,profile,banner_package)
 
 def commit_jobs(api,jobs,new):
     # Reconcile the generic package registry with its underlying cosmetic state.
@@ -179,7 +190,7 @@ def compose_jobs(api,jobs,profile_override=None):
         if name not in profile['packages']:continue
         source=job/'generado'/name;base,digest=_archive(api.ROOT,source)
         settings=profile['settings'];all_images={k:Path(settings[k]).read_bytes() for k in ['avatar','banner'] if settings.get(k)}
-        images=all_images if name=='Startup.upk' else None
+        images=all_images if name=='Startup.upk' else {'banner':all_images['banner']} if name==profile.get('banner_package') and 'banner' in all_images else None
         raw,validation=patch_package(Package(source,api.DEFAULT_ENGINE),settings.get('name',''),images,settings.get('title'),all_images.get('avatar'),settings.get('rank'))
         if raw is None:raise ValueError('No se pudo conservar el perfil en '+name)
         source.write_bytes(raw);report['generated_sha256']=sha(source);report['profile_composition']=validation

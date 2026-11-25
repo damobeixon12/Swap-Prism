@@ -142,6 +142,10 @@ def patch_movie(movie,name,title=None,avatar=None,rank=None):
     return bytes(result),fields,features
 
 
+def is_banner_item(pkg):
+    return any(pkg.class_name(e)=='ProductAsset_PlayerBanner_TA' for e in pkg.exports)
+
+
 def patch_package(pkg,name='',images=None,title=None,avatar=None,rank=None):
     """Return package and exact changed exports; never installs it."""
     name=validate_name(name);flat=pkg.flat();replacements={};movies=set();fields=[];paths=[];features=set()
@@ -168,8 +172,14 @@ def patch_package(pkg,name='',images=None,title=None,avatar=None,rank=None):
     allowed={'avatar':'gfx_shared.Icon_AvatarDefault','banner':'gfx_shared.PlayerBanner_Default'}
     for key,raw in (images or {}).items():
         if key=='avatar':continue # Embedded local frame; never replace the shared fallback.
-        if pkg.file.name.casefold()!='startup.upk' or key not in allowed:raise ValueError('Textura de perfil no permitida.')
-        found=[i for i,e in enumerate(pkg.exports) if pkg.class_name(e)=='Texture2D' and pkg.path(i)==allowed[key]]
+        if key=='banner' and is_banner_item(pkg):
+            # The equipped banner item shows its own artwork, not the shared default: replace its main texture.
+            art=[i for i,e in enumerate(pkg.exports) if pkg.class_name(e)=='Texture2D' and not pkg.path(i).rsplit('.',1)[-1].startswith('Thumb_')]
+            if not art:raise ValueError('El banner equipado no tiene una textura reconocible.')
+            found=[max(art,key=lambda i:i32(pkg.exports[i],32))]
+        else:
+            if pkg.file.name.casefold()!='startup.upk' or key not in allowed:raise ValueError('Textura de perfil no permitida.')
+            found=[i for i,e in enumerate(pkg.exports) if pkg.class_name(e)=='Texture2D' and pkg.path(i)==allowed[key]]
         if len(found)!=1:raise ValueError('No se localiza la textura exacta del perfil.')
         i=found[0];e=pkg.exports[i];serial=flat[i64(e,36):i64(e,36)+i32(e,32)]
         replacements[i]=inline_serial(pkg,serial,raw);paths.append(pkg.path(i));features.add(key)

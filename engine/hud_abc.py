@@ -7,10 +7,17 @@ class Reader:
         if self.pos>=len(self.data):raise ValueError('ABC truncado.')
         value=self.data[self.pos];self.pos+=1;return value
     def u30(self):
-        value=0
-        for n in range(5):
-            part=self.byte();value|=(part&127)<<(7*n)
-            if part<128:return value
+        # Hot path of every ABC parse: most values fit in one byte.
+        data=self.data;pos=self.pos
+        if pos>=len(data):raise ValueError('ABC truncado.')
+        part=data[pos]
+        if part<128:self.pos=pos+1;return part
+        value=part&127
+        for n in range(1,5):
+            pos+=1
+            if pos>=len(data):raise ValueError('ABC truncado.')
+            part=data[pos];value|=(part&127)<<(7*n)
+            if part<128:self.pos=pos+1;return value
         raise ValueError('Entero ABC inválido.')
     def skip(self,n):
         self.pos+=n
@@ -22,7 +29,21 @@ def encode_u30(value):
     out.append(value);return bytes(out)
 
 class ABC:
+    # Each profile stage re-parses the previous stage's output; parsed blocks are read-only, so reuse them.
+    _cache={}
+    def __new__(cls,data):
+        key=bytes(data);hit=cls._cache.get(key)
+        if hit is not None:return hit
+        self=super().__new__(cls);self._key=key
+        return self
+
     def __init__(self,data):
+        if 'strings' in self.__dict__:return
+        self._parse(data)
+        if len(ABC._cache)>=24:ABC._cache.pop(next(iter(ABC._cache)),None)
+        ABC._cache[self._key]=self
+
+    def _parse(self,data):
         self.data=data;r=Reader(data);r.skip(4);self.ints=[0];self.uints=[0];self.doubles=[0]
         for _ in range(max(0,r.u30()-1)):self.ints.append(r.u30())
         for _ in range(max(0,r.u30()-1)):self.uints.append(r.u30())

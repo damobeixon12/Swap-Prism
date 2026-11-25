@@ -198,19 +198,8 @@ impl App {
             let fade=egui::Rect::from_min_max(egui::pos2(rect.left(),rect.top()+rect.height()*0.35),rect.max);
             gradient(ui.painter(),fade,Color32::TRANSPARENT,d::BACKGROUND());
             let painter=ui.painter_at(rect);let left=rect.left()+44.;let bottom=rect.bottom()-40.;
-            // Rotating slides: 0 is the launcher, the rest show what the app can do. Click a dot to jump.
-            let focused=ui.ctx().input(|i|i.focused);
-            let hovered=ui.rect_contains_pointer(rect);
-            if focused&&!hovered&&self.hero_since.elapsed().as_secs_f32()>7.{self.hero_slide=(self.hero_slide+1)%SLIDES.len();self.hero_since=Instant::now();}
-            let t=ease((self.hero_since.elapsed().as_secs_f32()/0.5).min(1.));
-            ui.ctx().request_repaint_after(if focused{Duration::from_millis(16)}else{Duration::from_secs(1)});
-            let lift=(1.-t)*14.;let fade=Color32::WHITE.gamma_multiply(t);
-            let(eyebrow,title,copy,target)=SLIDES[self.hero_slide];
-            let eyebrow=if self.hero_slide==0{"ROCKET LEAGUE"}else{eyebrow};
-            let title=if self.hero_slide==0{if self.running{"En partida"}else{"Listo para jugar"}}else{title};
-            painter.text(egui::pos2(left,bottom-150.+lift),egui::Align2::LEFT_BOTTOM,eyebrow,egui::FontId::proportional(14.),d::GREEN().gamma_multiply(t));
-            painter.text(egui::pos2(left,bottom-92.+lift),egui::Align2::LEFT_BOTTOM,title,d::bold(46.),fade);
-            if self.hero_slide==0{
+            painter.text(egui::pos2(left,bottom-150.),egui::Align2::LEFT_BOTTOM,"ROCKET LEAGUE",egui::FontId::proportional(14.),d::GREEN());
+            painter.text(egui::pos2(left,bottom-92.),egui::Align2::LEFT_BOTTOM,if self.running{"En partida"}else{"Listo para jugar"},d::bold(46.),Color32::WHITE);
             // Profile line: avatar, name, title and real rank.
             let settings=&self.profile_state["settings"];
             let name=if s(settings,"name").is_empty(){s(&self.snapshot,"player_name").to_owned()}else{s(settings,"name").to_owned()};
@@ -228,25 +217,10 @@ impl App {
                 let icon=egui::Rect::from_center_size(egui::pos2(x+18.,avatar.center().y),Vec2::splat(40.));crate::ranks::rank_icon(ui,icon,tier);
                 painter.text(egui::pos2(icon.right()+6.,avatar.center().y),egui::Align2::LEFT_CENTER,format!("2v2 · {}",crate::ranks::tier_label(tier)),egui::FontId::proportional(14.),Color32::from_white_alpha(210));
             }
-            }else{
-                painter.text(egui::pos2(left,bottom-80.+lift),egui::Align2::LEFT_TOP,copy,egui::FontId::proportional(16.),Color32::from_white_alpha(215).gamma_multiply(t));
-                let open=egui::Rect::from_min_size(egui::pos2(left,bottom-40.+lift),Vec2::new(130.,38.));
-                if pill(ui,open,"Abrir",egui::FontId::proportional(14.),Color32::from_white_alpha(40),Color32::WHITE,true).clicked(){self.go_to(target);}
-            }
-            // Slide dots.
-            for i in 0..SLIDES.len(){
-                let active=ui.ctx().animate_bool_with_time(egui::Id::new(("hero-dot",i)),i==self.hero_slide,0.25);
-                let dot=egui::Rect::from_min_size(egui::pos2(rect.center().x-66.+i as f32*30.,rect.bottom()-22.),Vec2::new(8.+active*14.,6.));
-                let response=ui.interact(dot.expand(6.),egui::Id::new(("hero-dot-hit",i)),egui::Sense::click());
-                ui.painter().rect_filled(dot,3.,Color32::from_white_alpha((90.+active*165.)as u8));
-                if response.on_hover_cursor(egui::CursorIcon::PointingHand).clicked(){self.hero_slide=i;self.hero_since=Instant::now();}
-            }
             // Play button, bottom right; Epic or Steam is chosen in Ajustes.
             let play=egui::Rect::from_min_size(egui::pos2(rect.right()-44.-230.,bottom-96.),Vec2::new(230.,62.));
             let can=self.game.is_some()&&!self.busy&&!self.running;
             let via=if self.config["launch_via"]=="steam"{"steam"}else{"epic"};
-            let pulse=if can{(self.hero_since.elapsed().as_secs_f32()*2.2).sin()*0.5+0.5}else{0.};
-            ui.painter().rect_filled(play.expand(3.+pulse*5.),play.height()/2.+6.,d::GREEN().gamma_multiply(0.10+pulse*0.08));
             let response=pill(ui,play,if self.running{"JUGANDO"}else{"JUGAR"},d::bold(24.),d::GREEN(),d::ON_ACCENT(),can);
             let response=if self.running{response.on_hover_text("Rocket League ya está abierto.")}else if self.game.is_none(){response.on_hover_text("Elige la carpeta del juego en Ajustes.")}else if self.busy{response.on_hover_text("Espera a que termine lo que está haciendo la app.")}else{response};
             if response.clicked(){self.call("launcher_play",json!({"action":"launcher_play","game":self.game,"via":via}));}
@@ -271,8 +245,7 @@ impl App {
     fn hero_background(&self,ui:&egui::Ui,rect:egui::Rect){
         {
             if let Some(texture)=self.cover(ui.ctx()){
-                let zoom=1.+0.045*(0.5-0.5*(self.page_motion_start.elapsed().as_secs_f32()*0.12).cos());
-                let k=(rect.width()/texture.size.x).max(rect.height()/texture.size.y)*zoom;
+                let k=(rect.width()/texture.size.x).max(rect.height()/texture.size.y);
                 let visible=Vec2::new(rect.width()/k/texture.size.x,rect.height()/k/texture.size.y);
                 ui.painter().image(texture.id,rect,egui::Rect::from_min_size(egui::pos2((1.-visible.x)/2.,(1.-visible.y)/2.),visible),Color32::WHITE);
                 return;
@@ -288,43 +261,68 @@ impl App {
         }
     }
 
+    /// Accesos rápidos: a carousel of large cards that slides on its own (pauses on hover); arrows and dots to move.
     fn quick_access(&mut self,ui:&mut egui::Ui){
-            let gap=14.;
-            ui.label(RichText::new("Accesos rápidos").size(15.).color(d::MUTED()));ui.add_space(10.);
-            const CARDS:[(&str,&str,&str);6]=[
-                ("Skins","Skins","Cambia la apariencia de un objeto de tu inventario"),
-                ("Texturas","Texturas","Pelota, boostmeter y decals"),
-                ("Fake","Perfil","Foto, nombre, rango y títulos"),
-                ("Studio","Sonidos y colores","Reset, poste, paleta e inicio de temporada"),
-                ("Workshop","Mapas","Mapas de Workshop para entrenar"),
-                ("Queue","Cambios","Lo que tienes aplicado y cómo volver al original"),
-            ];
-            let width=((ui.available_width()-gap)/2.).max(200.);
-            let since=self.page_motion_start.elapsed().as_secs_f32();
-            for(row,pair) in CARDS.chunks(2).enumerate(){
-                let appear=ease(((since-0.15-row as f32*0.08)/0.35).clamp(0.,1.));
-                if appear<1.{ui.ctx().request_repaint();}
-                ui.set_opacity(appear);ui.add_space((1.-appear)*12.);
-                ui.with_layout(egui::Layout::left_to_right(egui::Align::Min),|ui|{
-                    ui.spacing_mut().item_spacing.x=gap;
-                    for(key,title,copy)in pair{
-                        let clicked=ui.allocate_ui_with_layout(Vec2::new(width,0.),egui::Layout::top_down(egui::Align::Min),|ui|{
-                            let response=d::card().inner_margin(18).show(ui,|ui|{
-                                ui.set_width(width-38.);
-                                ui.horizontal(|ui|{
-                                    let(r,_)=ui.allocate_exact_size(Vec2::splat(22.),egui::Sense::hover());crate::icons::paint(ui,r,key,d::GREEN());
-                                    ui.add_space(4.);
-                                    ui.vertical(|ui|{ui.label(RichText::new(*title).size(16.).strong());ui.label(RichText::new(*copy).size(13.5).color(d::MUTED()));});
-                                });
-                            }).response;
-                            ui.interact(response.rect,ui.id().with(("home-card",*key)),egui::Sense::click()).on_hover_cursor(egui::CursorIcon::PointingHand).clicked()
-                        }).inner;
-                        if clicked{self.go_to(key);}
-                    }
-                });
-                ui.add_space(gap);
-            }
-            ui.set_opacity(1.);
+        const CARDS:[(&str,&str,&str);8]=[
+            ("Skins","Skins","Cambia cualquier objeto de tu inventario por otro"),
+            ("Texturas","Texturas","Pelota, boostmeter y decals con tus imágenes"),
+            ("Fake","Perfil","Foto, banner, nombre, rango y títulos"),
+            ("Studio","Sonidos y colores","Reset, poste, paleta e inicio de temporada"),
+            ("Overlay","Overlay","FPS y tu MMR encima del juego"),
+            ("Workshop","Mapas","Mapas de Workshop para entrenar"),
+            ("MySettings","Mis ajustes","Cámara, controles y vídeo sin abrir el juego"),
+            ("Queue","Cambios","Lo aplicado y cómo volver al original"),
+        ];
+        let n=CARDS.len() as i64;
+        let width=ui.available_width();
+        let(head,_)=ui.allocate_exact_size(Vec2::new(width,34.),egui::Sense::hover());
+        ui.painter().text(head.left_center(),egui::Align2::LEFT_CENTER,"Accesos rápidos",d::bold(18.),d::TEXT());
+        for(i,(label,step))in[("›",1_i64),("‹",-1)].into_iter().enumerate(){
+            let r=egui::Rect::from_center_size(egui::pos2(head.right()-17.-i as f32*44.,head.center().y),Vec2::splat(34.));
+            if pill(ui,r,label,egui::FontId::proportional(20.),d::PANEL(),d::TEXT(),true).clicked(){self.cards_index+=step;self.cards_since=Instant::now();}
+        }
+        ui.add_space(12.);
+        let gap=16.;let per=if width>980.{3.}else{2.};let w=(width-gap*(per-1.))/per;let h=178.;
+        let(area,_)=ui.allocate_exact_size(Vec2::new(width,h),egui::Sense::hover());
+        let focused=ui.ctx().input(|i|i.focused);
+        if focused&&!ui.rect_contains_pointer(area)&&self.cards_since.elapsed().as_secs_f32()>4.5{self.cards_index+=1;self.cards_since=Instant::now();}
+        ui.ctx().request_repaint_after(if focused{Duration::from_millis(16)}else{Duration::from_secs(1)});
+        let pos=ui.ctx().animate_value_with_time(egui::Id::new("cards-pos"),self.cards_index as f32,0.55);
+        let mut strip=ui.new_child(egui::UiBuilder::new().max_rect(area));strip.set_clip_rect(area.intersect(ui.clip_rect()));
+        let first=pos.floor();
+        for k in -1..=(per as i64){
+            let index=(first as i64+k).rem_euclid(n) as usize;let(key,title,copy)=CARDS[index];
+            let x=area.left()+(first-pos+k as f32)*(w+gap);
+            let r=egui::Rect::from_min_size(egui::pos2(x,area.top()),Vec2::new(w,h));
+            if !r.intersects(area){continue;}
+            let response=strip.interact(r.intersect(area),egui::Id::new(("quick-card",k,index)),egui::Sense::click());
+            let hover=strip.ctx().animate_bool_with_time(response.id.with("hover"),response.hovered(),0.15);
+            let card=r.translate(Vec2::new(0.,-4.*hover));
+            let painter=strip.painter();
+            painter.rect_filled(card,16,d::PANEL());
+            // Accent glow in the corner, brighter on hover.
+            painter.with_clip_rect(card.shrink(1.).intersect(area)).circle_filled(card.right_top()+Vec2::new(-34.,34.),70.,d::GREEN().gamma_multiply(0.05+0.07*hover));
+            painter.rect_stroke(card,16,egui::Stroke::new(1_f32,d::GREEN().gamma_multiply(0.15+0.5*hover)),egui::StrokeKind::Inside);
+            let icon=egui::Rect::from_min_size(card.min+Vec2::new(22.,22.),Vec2::splat(40.));
+            painter.rect_filled(icon,12,d::GREEN().gamma_multiply(0.14));
+            crate::icons::paint(&strip,icon.shrink(9.),key,d::GREEN());
+            painter.text(card.left_bottom()+Vec2::new(22.,-62.),egui::Align2::LEFT_BOTTOM,title,d::bold(21.),d::TEXT());
+            let mut job=egui::text::LayoutJob::simple(copy.to_owned(),egui::FontId::proportional(14.),d::MUTED(),w-44.);job.wrap.max_rows=2;
+            painter.galley(card.left_bottom()+Vec2::new(22.,-54.),painter.layout_job(job),d::MUTED());
+            if response.on_hover_cursor(egui::CursorIcon::PointingHand).clicked(){self.go_to(key);}
+        }
+        ui.add_space(14.);
+        // Dots: one per card, the current one stretched.
+        let(dots,_)=ui.allocate_exact_size(Vec2::new(width,10.),egui::Sense::hover());
+        let current=self.cards_index.rem_euclid(n);
+        let start=dots.center().x-(n as f32*18.)/2.;
+        for i in 0..n{
+            let active=ui.ctx().animate_bool_with_time(egui::Id::new(("card-dot",i)),i==current,0.25);
+            let dot=egui::Rect::from_min_size(egui::pos2(start+i as f32*18.,dots.top()+2.),Vec2::new(6.+active*10.,6.));
+            if ui.interact(dot.expand(5.),egui::Id::new(("card-dot-hit",i)),egui::Sense::click()).on_hover_cursor(egui::CursorIcon::PointingHand).clicked(){self.cards_index+=i-current;self.cards_since=Instant::now();}
+            ui.painter().rect_filled(dot,3.,if i==current{d::GREEN()}else{d::LINE()});
+        }
+        ui.add_space(20.);
     }
 
     fn preview_at(&self, ui: &mut egui::Ui, rect: egui::Rect, row: &Value) {
@@ -769,15 +767,6 @@ impl App {
         });
     }
 }
-
-/// Home slides: (eyebrow, title, copy, section). Slide 0 is the launcher itself.
-const SLIDES:[(&str,&str,&str,&str);5]=[
-    ("","","","Home"),
-    ("SKINS","Cambia cualquier objeto","Coches, ruedas, boosts y explosiones con la apariencia que quieras.","Skins"),
-    ("TEXTURAS","Tu pelota, tu estilo","Pelota, boostmeter y decals con tus propias imágenes.","Texturas"),
-    ("PERFIL","Foto, nombre y título","Cambia cómo te ves en los menús del juego.","Fake"),
-    ("OVERLAY","Tu MMR encima del juego","Insignia y MMR de 1v1, 2v2 y 3v3, al pulsar el marcador.","Overlay"),
-];
 
 fn ease(t:f32)->f32{1.-(1.-t.clamp(0.,1.)).powi(3)}
 
