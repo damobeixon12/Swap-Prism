@@ -20,7 +20,7 @@ fn ini_bool(v:&Value)->bool{v.as_str().map(|s|s.eq_ignore_ascii_case("true")).un
 fn ini_int(v:&Value)->i64{v.as_str().and_then(|s|s.parse().ok()).or(v.as_i64()).unwrap_or(0)}
 
 impl App{
-    fn ensure_game_settings(&mut self){
+    pub(super) fn ensure_game_settings(&mut self){
         if self.game_settings.is_null()&&!self.settings_loading&&!self.busy{self.settings_loading=true;self.call("game_settings",json!({"action":"game_settings"}));}
     }
 
@@ -143,14 +143,18 @@ impl App{
         });
     }
 
-    pub(super) fn my_ranks(&mut self,ui:&mut egui::Ui){
-        self.ensure_game_settings();
-        // The game rewrites the save after each match: reload when its timestamp moves.
+    /// The game rewrites the save after each match: reload when its timestamp moves.
+    pub(super) fn watch_save(&mut self){
         if let Some(m)=self.game_settings["save"].as_str().and_then(|p|std::fs::metadata(p).ok()).and_then(|m|m.modified().ok()){
             let moved=self.ranks_mtime.is_some_and(|t|t!=m);
             if moved&&!self.busy{self.game_settings=Value::Null;self.settings_loading=false;}
             if !moved||!self.busy{self.ranks_mtime=Some(m);}
         }
+    }
+
+    pub(super) fn my_ranks(&mut self,ui:&mut egui::Ui){
+        self.ensure_game_settings();
+        self.watch_save();
         ui.ctx().request_repaint_after(std::time::Duration::from_secs(5));
         let skills=self.game_settings["skills"].as_array().cloned().unwrap_or_default();
         egui::ScrollArea::vertical().id_salt("my-ranks").show(ui,|ui|{

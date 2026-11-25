@@ -1,6 +1,18 @@
 use super::*;
 use crate::design as d;
 
+/// Current rating per ranked playlist, read from the visible text of the user's own Tracker page.
+const MMR_SCRIPT:&str=r#"(()=>[...document.body.innerText.matchAll(/RANKED (DUEL 1V1|DOUBLES 2V2|STANDARD 3V3)\s*\n\s*Current\s*\n\s*([\d.,]+)/gi)].map(m=>[m[1].toUpperCase(),m[2]]))()"#;
+
+pub fn parse_mmr(result:&str)->Vec<(i64,String)>{
+    let mut out:Vec<(i64,String)>=Vec::new();
+    for(mode,mmr)in serde_json::from_str::<Vec<(String,String)>>(result).unwrap_or_default(){
+        let id=match mode.as_str(){"DUEL 1V1"=>10,"DOUBLES 2V2"=>11,"STANDARD 3V3"=>13,_=>continue};
+        if !out.iter().any(|r|r.0==id){out.push((id,mmr.replace([',','.'],"")));}
+    }
+    out
+}
+
 pub fn profile_url(name:&str)->Result<String,String>{
     let name=name.trim();if name.is_empty()||name.chars().count()>64||name.chars().any(|c|c.is_control()){return Err("Escribe tu nombre de Epic exacto.".into());}
     let encoded:String=name.bytes().map(|b|if b.is_ascii_alphanumeric()||b"-._~".contains(&b){(b as char).to_string()}else{format!("%{b:02X}")}).collect();
@@ -26,10 +38,27 @@ impl App{
         if self.tracker_requested.is_none(){ui.painter().text(rect.center(),egui::Align2::CENTER_CENTER,"Pulsa Ver mi Tracker para cargar tu perfil aquí.",egui::FontId::proportional(17.),d::MUTED());}
     }
 
+    /// Keeps the rank overlay fed: tiers from the save, MMR from the Tracker page (reloaded every 2 min while playing).
+    pub(super) fn rank_tick(&mut self){
+        if self.tracker_requested.is_none(){if let Ok(url)=profile_url(&self.tracker_name){self.tracker_requested=Some(url);}}
+        self.ensure_game_settings();self.watch_save();
+        let tiers:Vec<(i64,usize)>=self.game_settings["skills"].as_array().map(|a|a.iter().filter_map(|s|Some((s["Playlist"].as_i64()?,s["Tier"].as_u64()? as usize))).collect()).unwrap_or_default();
+        self.rank_board.lock().unwrap().tiers=tiers;
+        let Some(view)=&self.tracker_web else{return};
+        let now=std::time::Instant::now();
+        if self.tracker_polled.is_none_or(|t|now-t>Duration::from_secs(5)){
+            self.tracker_polled=Some(now);let board=self.rank_board.clone();
+            let _=view.evaluate_script_with_callback(MMR_SCRIPT,move|r|{let rows=parse_mmr(&r);if !rows.is_empty(){board.lock().unwrap().mmr=rows;}});
+        }
+        if self.tracker_reloaded.is_none(){self.tracker_reloaded=Some(now);}
+        if self.running&&self.tracker_reloaded.is_some_and(|t|now-t>Duration::from_secs(120)){let _=view.reload();self.tracker_reloaded=Some(now);}
+    }
+
     pub(super) fn sync_tracker(&mut self,ctx:&egui::Context,frame:&eframe::Frame){
         let show=self.section=="Tracker"&&self.tracker_tab==1&&self.visible&&self.design_dir.is_none()&&self.tracker_requested.is_some();
-        if !show{if let Some(view)=&self.tracker_web{let _=view.set_visible(false);}return;}
-        let rect=self.tracker_bounds;let scale=ctx.pixels_per_point()as f64;
+        let background=self.overlay_preferences.rank&&self.tracker_requested.is_some()&&self.design_dir.is_none();
+        if !show{if let Some(view)=&self.tracker_web{let _=view.set_visible(false);}if !background||self.tracker_web.is_some(){return;}}
+        let rect=if self.tracker_bounds.is_finite(){self.tracker_bounds}else{egui::Rect::from_min_size(egui::Pos2::ZERO,Vec2::new(900.,700.))};let scale=ctx.pixels_per_point()as f64;
         let bounds=wry::Rect{position:wry::dpi::PhysicalPosition::new((rect.left()as f64*scale)as i32,(rect.top()as f64*scale)as i32).into(),size:wry::dpi::PhysicalSize::new((rect.width()as f64*scale).max(1.)as u32,(rect.height()as f64*scale).max(1.)as u32).into()};
         let url=self.tracker_requested.as_ref().unwrap().clone();
         if self.tracker_web.is_none()&&self.tracker_error.is_empty(){
@@ -44,12 +73,13 @@ impl App{
         if let Some(view)=&self.tracker_web{
             if self.tracker_loaded!=url{let _=view.load_url(&url);self.tracker_loaded=url;}
             if self.tracker_last_bounds!=Some(bounds){let _=view.set_bounds(bounds);self.tracker_last_bounds=Some(bounds);}
-            let _=view.set_visible(true);
+            let _=view.set_visible(show);
         }
     }
 }
 
 #[cfg(test)]mod tests{use super::*;
  #[test]fn epic_path_preserves_final_dot(){assert!(profile_url("example.").unwrap().ends_with("/example./overview"));}
+ #[test]fn reads_tracker_ratings(){assert_eq!(parse_mmr(r#"[["DUEL 1V1","1,683"],["DOUBLES 2V2","2.668"],["HOOPS","9"],["DUEL 1V1","7"]]"#),vec![(10,"1683".into()),(11,"2668".into())]);assert!(parse_mmr("null").is_empty());}
  #[test]fn epic_path_is_not_a_url_input(){assert!(profile_url("a/b?#").unwrap().contains("a%2Fb%3F%23"));assert!(profile_url("").is_err());}
 }

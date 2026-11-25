@@ -203,6 +203,9 @@ struct App {
     telemetry: telemetry::Controller,
     overlay_preferences: overlay::Preferences,
     overlay_placement: std::sync::Arc<std::sync::Mutex<overlay::Placement>>,
+    rank_board: std::sync::Arc<std::sync::Mutex<overlay::RankBoard>>,
+    tracker_polled: Option<std::time::Instant>,
+    tracker_reloaded: Option<std::time::Instant>,
 }
 impl App {
     fn new(cc: &eframe::CreationContext<'_>, root: PathBuf, smoke: Option<PathBuf>) -> Self {
@@ -312,6 +315,9 @@ impl App {
             overlay_placement: std::sync::Arc::new(std::sync::Mutex::new(
                 overlay::Placement::default(),
             )),
+            rank_board: Default::default(),
+            tracker_polled: None,
+            tracker_reloaded: None,
         };
         if let Some(i) = std::env::args().position(|a| a == "--overlay-window-check") {
             app.overlay_placement.lock().unwrap().capture =
@@ -636,6 +642,7 @@ impl eframe::App for App {
         }
         self.prepare_design(ctx);
         self.render(ctx);
+        if self.overlay_preferences.rank{self.rank_tick();}
         self.sync_tracker(ctx,_frame);
         self.queue_motion(ctx);
         self.capture_design(ctx);
@@ -645,6 +652,7 @@ impl eframe::App for App {
             self.telemetry.reading.clone(),
             self.overlay_placement.clone(),
         );
+        overlay::show_ranks(ctx,&self.overlay_preferences,self.rank_board.clone());
         self.update_panel(ctx);
         if let Some((file,frame))=self.shot.as_mut(){
             *frame+=1;ctx.request_repaint();

@@ -67,10 +67,10 @@ pub fn foreground_game() -> bool {
 /// Some Windows/OpenGL drivers present transparent child surfaces as opaque
 /// black. A color key on our own borderless window removes that fallback matte.
 /// Never touches the game window or another process's overlay.
-pub fn transparent_overlay(editing:bool) {
+pub fn transparent_overlay(title:&str,editing:bool) {
     use windows_sys::Win32::UI::WindowsAndMessaging::*;
     unsafe {
-        let title:Vec<u16>="Swap Prism · Overlay\0".encode_utf16().collect();
+        let title:Vec<u16>=title.encode_utf16().chain([0]).collect();
         let window=FindWindowW(std::ptr::null(),title.as_ptr());
         if window.is_null(){return;}
         let mut pid=0;GetWindowThreadProcessId(window,&mut pid);
@@ -79,19 +79,28 @@ pub fn transparent_overlay(editing:bool) {
         let mut desired=(style|WS_EX_LAYERED as isize|WS_EX_TOOLWINDOW as isize)&!(WS_EX_APPWINDOW as isize);
         if editing{desired&=!(WS_EX_NOACTIVATE as isize);}else{desired|=WS_EX_NOACTIVATE as isize;}
         if style!=desired{SetWindowLongPtrW(window,GWL_EXSTYLE,desired);}
-        static CONFIGURED:std::sync::atomic::AtomicIsize=std::sync::atomic::AtomicIsize::new(0);
-        if CONFIGURED.swap(window as isize,std::sync::atomic::Ordering::Relaxed)!=window as isize{
-            SetLayeredWindowAttributes(window,0,255,LWA_COLORKEY);
-        }
+        static CONFIGURED:std::sync::Mutex<Vec<isize>>=std::sync::Mutex::new(Vec::new());
+        let mut done=CONFIGURED.lock().unwrap();
+        if !done.contains(&(window as isize)){done.push(window as isize);SetLayeredWindowAttributes(window,0,255,LWA_COLORKEY);}
     }
 }
-pub fn overlay_visibility(visible:bool){
+pub fn overlay_visibility(title:&str,visible:bool){
     use windows_sys::Win32::UI::WindowsAndMessaging::*;
     unsafe{
-        let title:Vec<u16>="Swap Prism · Overlay\0".encode_utf16().collect();let window=FindWindowW(std::ptr::null(),title.as_ptr());if window.is_null(){return;}
+        let title:Vec<u16>=title.encode_utf16().chain([0]).collect();let window=FindWindowW(std::ptr::null(),title.as_ptr());if window.is_null(){return;}
         let mut pid=0;GetWindowThreadProcessId(window,&mut pid);if pid!=std::process::id(){return;}
         if (IsWindowVisible(window)!=0)!=visible{ShowWindow(window,if visible{SW_SHOWNOACTIVATE}else{SW_HIDE});}
     }
+}
+/// True once per press of the scoreboard button: Tab, or View/Back on an XInput pad. Read-only OS queries.
+pub fn scoreboard_pressed()->bool{
+    use std::sync::atomic::{AtomicBool,Ordering};
+    use windows_sys::Win32::UI::Input::{KeyboardAndMouse::{GetAsyncKeyState,VK_TAB},XboxController::{XInputGetState,XINPUT_GAMEPAD_BACK,XINPUT_STATE}};
+    static HELD:AtomicBool=AtomicBool::new(false);
+    let mut down=unsafe{GetAsyncKeyState(VK_TAB as i32)}<0;
+    for pad in 0..4{let mut state:XINPUT_STATE=unsafe{std::mem::zeroed()};if unsafe{XInputGetState(pad,&mut state)}==0&&state.Gamepad.wButtons&XINPUT_GAMEPAD_BACK!=0{down=true;}}
+    let was=HELD.swap(down,Ordering::Relaxed);
+    down&&!was
 }
 pub fn game_bounds() -> Option<[f32; 4]> {
     struct Search {
