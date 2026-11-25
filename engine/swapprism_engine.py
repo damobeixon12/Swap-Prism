@@ -100,10 +100,11 @@ def request(obj):
         require_closed()
         names=obj.get('names')
         if names is not None:
-            from texture_engine import METER_COMPANIONS
+            from texture_engine import METER_COMPANIONS,BALL_COMPANIONS
             state=load_state(api.ROOT/'data')
-            if 'GFX_Hud_SF.upk' in names:
-                names=list(dict.fromkeys(list(names)+[n for n in METER_COMPANIONS if state.get(n,{}).get('hud_display_companion')]))
+            for main,group in (('GFX_Hud_SF.upk',METER_COMPANIONS),('GameInfo_Soccar_SF.upk',BALL_COMPANIONS)):
+                if main in names:
+                    names=list(dict.fromkeys(list(names)+[n for n in group if state.get(n,{}).get('hud_display_companion')]))
         count=restore_all(api.ROOT/'data',names=names)
         profile_manager.after_restore(api.ROOT,names)
         return {'count':count,'state':load_state(api.ROOT/'data'),'profile':profile_manager.load(api.ROOT),'studio':studio_backend.after_restore(api,names)}

@@ -49,8 +49,10 @@ def prepare_all(api,plans,game,version,log=print):
         report=json.loads((job/'informe.json').read_text(encoding='utf-8'));name=report['target']['AssetPackage']
         if name.casefold() in packages:raise ValueError('Dos cambios usan el mismo paquete: '+name+'. Conserva uno en la cola.')
         packages.add(name.casefold());jobs.append(job)
-        if plan['kind']=='texture' and plan['pack'].category=='Boostmeter':
-            for companion in texture_engine.generate_meter_companions(api,game,plan['pack'],api.ROOT/'paquetes'):
+        companions=(texture_engine.generate_meter_companions if plan['kind']=='texture' and plan['pack'].category=='Boostmeter' else
+                    texture_engine.generate_ball_companions if plan['kind']=='texture' and plan['pack'].category=='Pelota' else None)
+        if companions:
+            for companion in companions(api,game,plan['pack'],api.ROOT/'paquetes'):
                 companion_report=json.loads((companion/'informe.json').read_text(encoding='utf8'));companion_name=companion_report['target']['AssetPackage']
                 if companion_name.casefold() in packages:raise ValueError('Dos cambios usan la biblioteca '+companion_name)
                 packages.add(companion_name.casefold());jobs.append(companion)

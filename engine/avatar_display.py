@@ -85,22 +85,30 @@ def patch_avatar_abc(data):
     def prop(name):return b'\x66'+encode_u30(_ref(abc,name))
     def setprop(name):return b'\x61'+encode_u30(_ref(abc,name))
     tinted=b'\xd0'+prop('tintedAvatarIcons');loader=b'\xd0'+prop('avatarIconLoader')
+    # The team colour is applied to the whole TintedAvatarIcons sprite; the photo keeps its own colours.
+    untint=tinted+prop('transform')+loader+prop('transform')+prop('colorTransform')+setprop('colorTransform')
     render=loader+b'\x27'+setprop('visible')+tinted+b'\x26'+setprop('visible')
-    render+=tinted+b'\x2c'+encode_u30(len(abc.strings))+b'\x4f'+encode_u30(_ref(abc,'gotoAndStop'))+b'\x01\x47'
+    render+=tinted+b'\x2c'+encode_u30(len(abc.strings))+b'\x4f'+encode_u30(_ref(abc,'gotoAndStop'))+b'\x01'+untint+b'\x47'
     def guard(check,code):return check+b'\x12'+len(code).to_bytes(3,'little')+code
     row=b'\xd0'+prop('tagame.controls:PlayerAvatar.m_playerInfoRow')
-    prefix=guard(row,guard(row+prop('bLocalPlayer'),render))
     ident=b'\xd0'+prop('tagame.controls:PlayerAvatar.m_playerId')
-    compare=ident+b'\x60'+encode_u30(_ref(abc,'tagame.api.LocalPlayer'))+prop('PlayerID')+b'\x14'+len(render).to_bytes(3,'little')+render
-    prefix+=guard(ident,compare)
-    code=body['code'][:scope]+prefix+body['code'][scope:]
+    def local_only(code):
+        compare=ident+b'\x60'+encode_u30(_ref(abc,'tagame.api.LocalPlayer'))+prop('PlayerID')+b'\x14'+len(code).to_bytes(3,'little')+code
+        return guard(row,guard(row+prop('bLocalPlayer'),code))+guard(ident,compare)
+    code=body['code'][:scope]+local_only(render)+body['code'][scope:]
     edits=[(body['lengthpos'],body['codepos']+len(body['code']),encode_u30(len(code))+code),
            (abc.string_pool_end,abc.string_pool_end,encode_u30(len(FRAME))+FRAME.encode())]
+    changed={mid:code}
+    tint=[t['method'] for t in cls.get('traits',[]) if t['kind']==1 and t['name'].endswith('.updateTeamColor')]
+    if len(tint)==1 and abc.bodies[tint[0]]['code'][-1:]==b'\x47' and not abc.bodies[tint[0]]['exceptions']:
+        # Runs after every team-colour update; inserted just before the final returnvoid.
+        tbody=abc.bodies[tint[0]];tcode=tbody['code'][:-1]+local_only(untint+b'\x47')+b'\x47';changed[tint[0]]=tcode
+        edits.append((tbody['lengthpos'],tbody['codepos']+len(tbody['code']),encode_u30(len(tcode))+tcode))
     r=Reader(data);r.pos=abc.string_count_pos;r.u30();edits.append((abc.string_count_pos,r.pos,encode_u30(len(abc.strings)+1)))
     result=data
     for start,end,repl in sorted(edits,reverse=True):result=result[:start]+repl+result[end:]
     after=ABC(result)
     if after.classes!=abc.classes or after.methods!=abc.methods:raise ValueError('Cambió una definición del avatar.')
     for method,old in abc.bodies.items():
-        if after.bodies[method]['code']!=(code if method==mid else old['code']):raise ValueError('Cambió otro método del avatar.')
-    return result,['tagame.controls.PlayerAvatar.localOnlyImage']
+        if after.bodies[method]['code']!=changed.get(method,old['code']):raise ValueError('Cambió otro método del avatar.')
+    return result,['tagame.controls.PlayerAvatar.localOnlyImage']+(['tagame.controls.PlayerAvatar.localUntinted'] if len(changed)>1 else [])

@@ -11,6 +11,25 @@ from swap_manager import pristine,sha
 from menu_guard import require_editable
 
 METER_COMPANIONS=('GFxShell_SF.upk','GFx_ReplayHud_SF.upk','GFX_SpectatorHud_SF.upk')
+# Every game mode (training, tutorial, LTMs...) ships its own copy of Ball_Default00_D/N/RGB.
+BALL_COMPANIONS=tuple('GameInfo_'+m+'_SF.upk' for m in (
+    'Basketball','BladeBall','Breakout','FTE','FootBall','GodBall','HeatseekerTerritory','Hops','Items','KeepUp','KnockOut',
+    'LTM_AprilFool','LTM_BeachBall','LTM_BoomerBall','LTM_Demolition','LTM_DropshotRumble','LTM_Eggstra','LTM_GForce',
+    'LTM_Moonball','LTM_Pinball','LTM_SpeedDemon','LTM_SpikeRush','LTM_SuperCube','MagnusFutball','Possession','Season',
+    'SnowDayTerritory','SpikeDrop','Territory','TrainingEditor','Tutorial'))+('Gameinfo_Hockey_SF.upk',)
+
+def generate_ball_companions(api,game,pack,output):
+    """Same ball texture in every mode's package; skips packages another change already uses."""
+    from swap_manager import load_state
+    cooked=Path(game)/'TAGame/CookedPCConsole';state=load_state(api.ROOT/'data');jobs=[]
+    for name in BALL_COMPANIONS:
+        entry=state.get(name)
+        if not (cooked/name).exists() or (entry and entry.get('status')=='installed' and not entry.get('hud_display_companion')):continue
+        job=generate(api,game,api.DEFAULT_ENGINE,pack,output,package=name)
+        report=json.loads((job/'informe.json').read_text(encoding='utf-8'));report['hud_display_companion']=True
+        report['target']['Product']='Pelota · '+name[9:-7]
+        (job/'informe.json').write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding='utf-8');jobs.append(job)
+    return jobs
 
 def generate_meter_companions(api,game,pack,output):
     """The shared code library can define BoostMeterView before the HUD movie.
@@ -231,7 +250,7 @@ def add_mask_binding(pkg,flat,raw,replacements):
         exp=pkg.exports[index];replacements[index]=inline_serial(pkg,flat[i64(exp,36):i64(exp,36)+i32(exp,32)],raw)
     return bool(changed)
 
-def generate(api,game,engine,pack,output,target=None,boost_texture=None):
+def generate(api,game,engine,pack,output,target=None,boost_texture=None,package=None):
     require_editable()
     base=None
     if pack.category=='Decal':
@@ -244,7 +263,7 @@ def generate(api,game,engine,pack,output,target=None,boost_texture=None):
         if uses[target.get('AssetPackage')]>1 or uses[base.get('AssetPackage')]>1:
             raise ValueError('El decal usa un paquete compartido. Elige otro destino.')
     if pack.category=='Pelota':
-        name='GameInfo_Soccar_SF.upk';mapping={'Diffuse':'Ball_Default00_D','Normal':'Ball_Default00_N','Masks':'Ball_Default00_RGB'}
+        name=package or 'GameInfo_Soccar_SF.upk';mapping={'Diffuse':'Ball_Default00_D','Normal':'Ball_Default00_N','Masks':'Ball_Default00_RGB'}
     elif pack.category=='Boostmeter':
         name='GFX_Hud_SF.upk';mapping={'Background':'BoostMeter_Background','Fill':'BoostMeter_Fill','Tint':'BoostMeter_FillTintablePortion','Glow':'BoostMeter_Glow'}
     else:
