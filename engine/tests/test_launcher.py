@@ -3,6 +3,15 @@ from pathlib import Path
 from unittest.mock import patch
 import launcher
 
+class EpicLaunch(unittest.TestCase):
+    def test_link_for_matching_install(self):
+        import json
+        with tempfile.TemporaryDirectory() as tmp:
+            dat=Path(tmp)/'LauncherInstalled.dat'
+            dat.write_text(json.dumps({'InstallationList':[{'InstallLocation':tmp,'NamespaceId':'ns','ItemId':'it','AppName':'Sugar'}]}),encoding='utf-8')
+            self.assertEqual(launcher.epic_url(tmp,dat),'com.epicgames.launcher://apps/ns%3Ait%3ASugar?action=launch&silent=true')
+            with self.assertRaisesRegex(ValueError,'Steam'):launcher.epic_url(Path(tmp)/'otro',dat)
+
 class SteamShortcut(unittest.TestCase):
     def test_vdf_roundtrip_and_known_id(self):
         data={'0':{'appid':-5,'AppName':'X','Exe':'"C:\a.exe"','IsHidden':0,'tags':{}}}

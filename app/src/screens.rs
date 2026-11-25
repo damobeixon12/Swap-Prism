@@ -80,6 +80,30 @@ impl App {
                 }
             });
         if pending>0{self.apply_bar(ctx,pending);}
+        self.splash(ctx);
+    }
+
+    /// Opening animation (1.4 s): the logo rises out of a soft glow, the name is revealed left to right, then all fades.
+    fn splash(&self,ctx:&egui::Context){
+        let t=self.splash_at.elapsed().as_secs_f32();
+        if t>1.4||(self.shot.is_some()&&std::env::var_os("SP_SHOT_SPLASH").is_none())||self.design_dir.is_some(){return;}
+        ctx.request_repaint();
+        let screen=ctx.screen_rect();let out=1.-((t-1.1)/0.3).clamp(0.,1.);
+        let painter=ctx.layer_painter(egui::LayerId::new(egui::Order::Tooltip,egui::Id::new("splash")));
+        painter.rect_filled(screen,0,d::BACKGROUND().gamma_multiply(out));
+        let grow=ease(t/0.65);let center=screen.center()-Vec2::new(0.,26.);
+        painter.circle_filled(center,60.+50.*grow,d::GREEN().gamma_multiply(0.07*grow*out));
+        painter.circle_filled(center,40.+30.*grow,d::GREEN().gamma_multiply(0.06*grow*out));
+        if let Ok(egui::load::TexturePoll::Ready{texture})=egui::Image::new(egui::include_image!("../assets/logo.png")).load_for_size(ctx,Vec2::splat(96.)){
+            let size=96.*(0.8+0.2*grow);let rect=egui::Rect::from_center_size(center+Vec2::new(0.,(1.-grow)*18.),Vec2::splat(size));
+            painter.image(texture.id,rect,egui::Rect::from_min_max(egui::pos2(0.,0.),egui::pos2(1.,1.)),Color32::WHITE.gamma_multiply(grow*out));
+        }
+        let reveal=ease((t-0.35)/0.5);
+        let galley=painter.layout_no_wrap("Swap Prism".into(),d::bold(32.),Color32::WHITE.gamma_multiply(out));let(w,h)=(galley.size().x,galley.size().y);
+        let at=egui::pos2(screen.center().x-w/2.,center.y+66.+(1.-reveal)*8.);
+        let clip=egui::Rect::from_min_size(at-Vec2::new(4.,4.),Vec2::new(w*reveal+8.,h+8.));
+        painter.with_clip_rect(clip).galley(at,galley,Color32::WHITE);
+        painter.line_segment([egui::pos2(at.x,at.y+h+6.),egui::pos2(at.x+w*reveal,at.y+h+6.)],egui::Stroke::new(2_f32,d::GREEN().gamma_multiply(out)));
     }
 
     /// Sub-pages of the current section, as underlined tabs under the title.
@@ -174,8 +198,19 @@ impl App {
             let fade=egui::Rect::from_min_max(egui::pos2(rect.left(),rect.top()+rect.height()*0.35),rect.max);
             gradient(ui.painter(),fade,Color32::TRANSPARENT,d::BACKGROUND());
             let painter=ui.painter_at(rect);let left=rect.left()+44.;let bottom=rect.bottom()-40.;
-            painter.text(egui::pos2(left,bottom-150.),egui::Align2::LEFT_BOTTOM,"ROCKET LEAGUE",egui::FontId::proportional(14.),Color32::from_white_alpha(190));
-            painter.text(egui::pos2(left,bottom-92.),egui::Align2::LEFT_BOTTOM,if self.running{"En partida"}else{"Listo para jugar"},d::bold(46.),Color32::WHITE);
+            // Rotating slides: 0 is the launcher, the rest show what the app can do. Click a dot to jump.
+            let focused=ui.ctx().input(|i|i.focused);
+            let hovered=ui.rect_contains_pointer(rect);
+            if focused&&!hovered&&self.hero_since.elapsed().as_secs_f32()>7.{self.hero_slide=(self.hero_slide+1)%SLIDES.len();self.hero_since=Instant::now();}
+            let t=ease((self.hero_since.elapsed().as_secs_f32()/0.5).min(1.));
+            ui.ctx().request_repaint_after(if focused{Duration::from_millis(16)}else{Duration::from_secs(1)});
+            let lift=(1.-t)*14.;let fade=Color32::WHITE.gamma_multiply(t);
+            let(eyebrow,title,copy,target)=SLIDES[self.hero_slide];
+            let eyebrow=if self.hero_slide==0{"ROCKET LEAGUE"}else{eyebrow};
+            let title=if self.hero_slide==0{if self.running{"En partida"}else{"Listo para jugar"}}else{title};
+            painter.text(egui::pos2(left,bottom-150.+lift),egui::Align2::LEFT_BOTTOM,eyebrow,egui::FontId::proportional(14.),d::GREEN().gamma_multiply(t));
+            painter.text(egui::pos2(left,bottom-92.+lift),egui::Align2::LEFT_BOTTOM,title,d::bold(46.),fade);
+            if self.hero_slide==0{
             // Profile line: avatar, name, title and real rank.
             let settings=&self.profile_state["settings"];
             let name=if s(settings,"name").is_empty(){s(&self.snapshot,"player_name").to_owned()}else{s(settings,"name").to_owned()};
@@ -193,19 +228,29 @@ impl App {
                 let icon=egui::Rect::from_center_size(egui::pos2(x+18.,avatar.center().y),Vec2::splat(40.));crate::ranks::rank_icon(ui,icon,tier);
                 painter.text(egui::pos2(icon.right()+6.,avatar.center().y),egui::Align2::LEFT_CENTER,format!("2v2 · {}",crate::ranks::tier_label(tier)),egui::FontId::proportional(14.),Color32::from_white_alpha(210));
             }
-            // Play button and Steam option, bottom right.
+            }else{
+                painter.text(egui::pos2(left,bottom-80.+lift),egui::Align2::LEFT_TOP,copy,egui::FontId::proportional(16.),Color32::from_white_alpha(215).gamma_multiply(t));
+                let open=egui::Rect::from_min_size(egui::pos2(left,bottom-40.+lift),Vec2::new(130.,38.));
+                if pill(ui,open,"Abrir",egui::FontId::proportional(14.),Color32::from_white_alpha(40),Color32::WHITE,true).clicked(){self.go_to(target);}
+            }
+            // Slide dots.
+            for i in 0..SLIDES.len(){
+                let active=ui.ctx().animate_bool_with_time(egui::Id::new(("hero-dot",i)),i==self.hero_slide,0.25);
+                let dot=egui::Rect::from_min_size(egui::pos2(rect.center().x-66.+i as f32*30.,rect.bottom()-22.),Vec2::new(8.+active*14.,6.));
+                let response=ui.interact(dot.expand(6.),egui::Id::new(("hero-dot-hit",i)),egui::Sense::click());
+                ui.painter().rect_filled(dot,3.,Color32::from_white_alpha((90.+active*165.)as u8));
+                if response.on_hover_cursor(egui::CursorIcon::PointingHand).clicked(){self.hero_slide=i;self.hero_since=Instant::now();}
+            }
+            // Play button, bottom right; Epic or Steam is chosen in Ajustes.
             let play=egui::Rect::from_min_size(egui::pos2(rect.right()-44.-230.,bottom-96.),Vec2::new(230.,62.));
             let can=self.game.is_some()&&!self.busy&&!self.running;
+            let via=if self.config["launch_via"]=="steam"{"steam"}else{"epic"};
+            let pulse=if can{(self.hero_since.elapsed().as_secs_f32()*2.2).sin()*0.5+0.5}else{0.};
+            ui.painter().rect_filled(play.expand(3.+pulse*5.),play.height()/2.+6.,d::GREEN().gamma_multiply(0.10+pulse*0.08));
             let response=pill(ui,play,if self.running{"JUGANDO"}else{"JUGAR"},d::bold(24.),d::GREEN(),d::ON_ACCENT(),can);
-            let response=if self.running{response.on_hover_text("Rocket League ya está abierto.")}else if self.game.is_none(){response.on_hover_text("Elige la carpeta del juego en Ajustes.")}else{response};
-            if response.clicked(){self.call("launcher_play",json!({"action":"launcher_play","game":self.game}));}
-            let steam=self.launcher_state["steam"]==true;let added=self.launcher_state["in_steam"]==true;
-            if steam{
-                let link=egui::Rect::from_min_size(egui::pos2(play.left()+25.,play.bottom()+12.),Vec2::new(play.width()-50.,36.));
-                let response=pill(ui,link,if added{"Jugar desde Steam"}else{"Añadir a Steam"},egui::FontId::proportional(14.),Color32::from_black_alpha(140),Color32::WHITE,can);
-                let response=if self.running{response.on_hover_text("Rocket League ya está abierto.")}else if self.busy{response.on_hover_text("Espera a que termine lo que está haciendo la app.")}else if added{response.on_hover_text("Abre Steam y lanza Rocket League como juego externo.")}else{response.on_hover_text("Steam tiene que estar cerrado del todo.")};
-                if response.clicked(){let action=if added{"launcher_steam_play"}else{"launcher_steam_add"};self.call(action,json!({"action":action,"game":self.game}));}
-            }
+            let response=if self.running{response.on_hover_text("Rocket League ya está abierto.")}else if self.game.is_none(){response.on_hover_text("Elige la carpeta del juego en Ajustes.")}else if self.busy{response.on_hover_text("Espera a que termine lo que está haciendo la app.")}else{response};
+            if response.clicked(){self.call("launcher_play",json!({"action":"launcher_play","game":self.game,"via":via}));}
+            painter.text(egui::pos2(play.center().x,play.bottom()+14.),egui::Align2::CENTER_TOP,if via=="steam"{"con Steam"}else{"con Epic Games"},egui::FontId::proportional(13.),Color32::from_white_alpha(170));
             // Change the cover picture, top right.
             let change=egui::Rect::from_min_size(egui::pos2(rect.right()-44.-150.,rect.top()+24.),Vec2::new(150.,32.));
             if pill(ui,change,"Cambiar imagen",egui::FontId::proportional(13.),Color32::from_black_alpha(120),Color32::WHITE,true).clicked(){
@@ -226,7 +271,8 @@ impl App {
     fn hero_background(&self,ui:&egui::Ui,rect:egui::Rect){
         {
             if let Some(texture)=self.cover(ui.ctx()){
-                let k=(rect.width()/texture.size.x).max(rect.height()/texture.size.y);
+                let zoom=1.+0.045*(0.5-0.5*(self.page_motion_start.elapsed().as_secs_f32()*0.12).cos());
+                let k=(rect.width()/texture.size.x).max(rect.height()/texture.size.y)*zoom;
                 let visible=Vec2::new(rect.width()/k/texture.size.x,rect.height()/k/texture.size.y);
                 ui.painter().image(texture.id,rect,egui::Rect::from_min_size(egui::pos2((1.-visible.x)/2.,(1.-visible.y)/2.),visible),Color32::WHITE);
                 return;
@@ -254,7 +300,11 @@ impl App {
                 ("Queue","Cambios","Lo que tienes aplicado y cómo volver al original"),
             ];
             let width=((ui.available_width()-gap)/2.).max(200.);
-            for pair in CARDS.chunks(2){
+            let since=self.page_motion_start.elapsed().as_secs_f32();
+            for(row,pair) in CARDS.chunks(2).enumerate(){
+                let appear=ease(((since-0.15-row as f32*0.08)/0.35).clamp(0.,1.));
+                if appear<1.{ui.ctx().request_repaint();}
+                ui.set_opacity(appear);ui.add_space((1.-appear)*12.);
                 ui.with_layout(egui::Layout::left_to_right(egui::Align::Min),|ui|{
                     ui.spacing_mut().item_spacing.x=gap;
                     for(key,title,copy)in pair{
@@ -274,6 +324,7 @@ impl App {
                 });
                 ui.add_space(gap);
             }
+            ui.set_opacity(1.);
     }
 
     fn preview_at(&self, ui: &mut egui::Ui, rect: egui::Rect, row: &Value) {
@@ -658,6 +709,21 @@ impl App {
                 if let Some(path)=&self.game{d::muted(ui,path.display().to_string());}else{d::muted(ui,"No se ha encontrado el juego. Selecciona la carpeta rocketleague, que contiene Binaries y TAGame.");}
                 if ui.button("Elegir carpeta del juego").clicked(){if let Some(path)=rfd::FileDialog::new().set_title("Elige rocketleague (contiene Binaries y TAGame)").pick_folder(){if platform::valid_game(&path){self.game=Some(path.clone());self.config["game_path"]=json!(path);self.status=platform::save_config(&self.root,&self.config).err().unwrap_or("Ruta guardada.".into());}else{self.status="Elige la carpeta rocketleague que contiene Binaries y TAGame.".into();}}}
             });ui.add_space(12.);
+            if self.launcher_state.is_null()&&!self.launcher_loading&&!self.busy{self.launcher_loading=true;self.call("launcher_status",json!({"action":"launcher_status","game":self.game}));}
+            d::card().show(ui,|ui|{
+                d::eyebrow(ui,"JUGAR",d::GREEN());ui.heading("Abrir Rocket League con");ui.add_space(10.);
+                let mut via=if self.config["launch_via"]=="steam"{"steam".to_owned()}else{"epic".to_owned()};let before=via.clone();
+                ui.horizontal(|ui|{ui.radio_value(&mut via,"epic".to_owned(),"Epic Games");ui.add_space(12.);ui.radio_value(&mut via,"steam".to_owned(),"Steam");});
+                if via!=before{self.config["launch_via"]=json!(via);self.status=platform::save_config(&self.root,&self.config).err().unwrap_or("Se abrirá con ".to_owned()+if via=="steam"{"Steam."}else{"Epic Games."});}
+                if via=="steam"{
+                    if self.launcher_state["steam"]==false{ui.label(RichText::new("Steam no está instalado en este PC.").color(d::RED()));}
+                    else if self.launcher_state["in_steam"]==true{d::muted(ui,"Ya está en tu biblioteca de Steam como juego externo.");}
+                    else{
+                        d::muted(ui,"Hay que añadirlo a tu biblioteca de Steam una vez. Cierra Steam del todo antes.");
+                        if ui.add_enabled(!self.busy&&self.game.is_some(),d::button("Añadir a Steam",d::GREEN())).clicked(){self.call("launcher_steam_add",json!({"action":"launcher_steam_add","game":self.game}));}
+                    }
+                }else{d::muted(ui,"Se abre a través del launcher de Epic, como siempre.");}
+            });ui.add_space(12.);
             d::card().show(ui,|ui|{
                 d::eyebrow(ui,"APARIENCIA",d::GREEN());ui.heading("Tema");ui.add_space(10.);
                 ui.horizontal_wrapped(|ui|{
@@ -703,6 +769,17 @@ impl App {
         });
     }
 }
+
+/// Home slides: (eyebrow, title, copy, section). Slide 0 is the launcher itself.
+const SLIDES:[(&str,&str,&str,&str);5]=[
+    ("","","","Home"),
+    ("SKINS","Cambia cualquier objeto","Coches, ruedas, boosts y explosiones con la apariencia que quieras.","Skins"),
+    ("TEXTURAS","Tu pelota, tu estilo","Pelota, boostmeter y decals con tus propias imágenes.","Texturas"),
+    ("PERFIL","Foto, nombre y título","Cambia cómo te ves en los menús del juego.","Fake"),
+    ("OVERLAY","Tu MMR encima del juego","Insignia y MMR de 1v1, 2v2 y 3v3, al pulsar el marcador.","Overlay"),
+];
+
+fn ease(t:f32)->f32{1.-(1.-t.clamp(0.,1.)).powi(3)}
 
 /// Rounded button painted at an exact rect with centred text; does not move the layout cursor.
 fn pill(ui:&mut egui::Ui,rect:egui::Rect,text:&str,font:egui::FontId,fill:Color32,color:Color32,enabled:bool)->egui::Response{

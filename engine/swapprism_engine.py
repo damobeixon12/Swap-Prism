@@ -65,7 +65,7 @@ def request(obj):
         import launcher;game=Path(obj['game']).resolve() if obj.get('game') else None
         if action=='launcher_status':return launcher.status(game)
         if game is None:raise ValueError('Elige la carpeta del juego en Ajustes.')
-        if action=='launcher_play':return launcher.play(game)
+        if action=='launcher_play':return launcher.play_steam(api.ROOT,game) if obj.get('via')=='steam' else launcher.play_epic(game)
         if action=='launcher_steam_add':return launcher.add_to_steam(api.ROOT,game)
         if action=='launcher_steam_play':return launcher.play_steam(api.ROOT,game)
     if action=='verify_files':

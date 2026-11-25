@@ -3,7 +3,8 @@
 Steam's shortcuts.vdf is binary KeyValues: 0x00 map, 0x01 string, 0x02 int32, 0x08 end of map.
 """
 from pathlib import Path
-import os,shutil,struct,subprocess,time,zlib
+import json,os,shutil,struct,subprocess,time,zlib
+from urllib.parse import quote
 
 NAME='Rocket League'
 
@@ -17,6 +18,24 @@ def exe(game):
 def play(game):
     path=exe(game);subprocess.Popen([str(path)],cwd=str(path.parent),creationflags=0x00000008)  # DETACHED_PROCESS
     return {'started':'direct'}
+
+
+def epic_url(game,installed=None):
+    """Epic's own launch link for this install (namespace:item:app from LauncherInstalled.dat)."""
+    installed=Path(installed or os.path.expandvars(r'%ProgramData%\Epic\UnrealEngineLauncher\LauncherInstalled.dat'))
+    try:entries=json.loads(installed.read_text(encoding='utf-8')).get('InstallationList',[])
+    except (OSError,ValueError):entries=[]
+    game=Path(game).resolve()
+    for e in entries:
+        if e.get('AppName') and Path(e.get('InstallLocation','')).resolve()==game:
+            parts=[e[k] for k in ('NamespaceId','ItemId','AppName') if e.get(k)] if e.get('NamespaceId') and e.get('ItemId') else [e['AppName']]
+            return 'com.epicgames.launcher://apps/'+'%3A'.join(quote(p,safe='') for p in parts)+'?action=launch&silent=true'
+    raise ValueError('Este juego no está instalado con Epic Games. Elige Steam en Ajustes.')
+
+
+def play_epic(game):
+    os.startfile(epic_url(game))
+    return {'started':'epic'}
 
 
 def steam_path():
