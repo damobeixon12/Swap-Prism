@@ -127,3 +127,39 @@ class InstallRestore(unittest.TestCase):
         self.assertEqual(swaps.inspect_state(self.state)[self.name]['observed_status'],'external')
 
 if __name__=='__main__':unittest.main()
+
+
+class EpicManifestBaseline(unittest.TestCase):
+    """Bad backups and files changed by other programs, judged against Epic's manifest."""
+    def setUp(self):
+        self.temp=tempfile.TemporaryDirectory();root=Path(self.temp.name)
+        self.cooked=root/'TAGame'/'CookedPCConsole';self.cooked.mkdir(parents=True)
+        self.state=root/'data';self.name='explosion_test_SF.upk';self.target=self.cooked/self.name
+        self.target.write_bytes(b'epic-original')
+        self.epic=patch('epic_manifest.expected',return_value=swaps.epic_manifest.sha1(self.target));self.epic.start()
+        self.proc=patch.object(swaps,'require_editable',return_value=EditState('closed','test'));self.proc.start()
+
+    def tearDown(self):
+        self.epic.stop();self.proc.stop();self.temp.cleanup()
+
+    def bad_backup_state(self):
+        backup=self.state/'backups'/self.name;backup.parent.mkdir(parents=True);backup.write_bytes(b'modified-by-old-version')
+        swaps.write_state(self.state,{self.name:{'target':str(self.target),'backup':str(backup),'original_sha256':swaps.sha(backup),
+                                                 'installed_sha256':'x','status':'restored'}})
+        return backup
+
+    def test_verified_file_heals_a_bad_backup(self):
+        backup=self.bad_backup_state()
+        self.assertEqual(swaps.pristine(self.cooked,self.name,self.state),self.target.resolve())
+        self.assertEqual(backup.read_bytes(),b'epic-original')
+        self.assertEqual(swaps.load_state(self.state)[self.name]['original_sha256'],swaps.sha(self.target))
+
+    def test_untracked_modified_file_is_never_backed_up(self):
+        self.target.write_bytes(b'changed-by-another-app')
+        with self.assertRaisesRegex(ValueError,'Verificar archivos'):swaps.pristine(self.cooked,self.name,self.state)
+        self.assertFalse(self.state.exists())
+
+    def test_restore_accepts_file_already_reset_by_launcher(self):
+        self.bad_backup_state();state=swaps.load_state(self.state);state[self.name]['status']='installed';swaps.write_state(self.state,state)
+        self.assertEqual(swaps.restore_all(self.state),0)
+        self.assertEqual(self.target.read_bytes(),b'epic-original')

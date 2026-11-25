@@ -183,6 +183,7 @@ struct App {
     title_query: String,
     navigation_search: String,
     changes_history: bool,
+    file_check: Value,
     audio_preview: Option<(String,Instant,f32)>,
     overlay_tab: usize,
     pack_query: String,
@@ -276,6 +277,7 @@ impl App {
             title_query: String::new(),
             navigation_search: String::new(),
             changes_history: false,
+            file_check: Value::Null,
             audio_preview: None,
             overlay_tab: 0,
             pack_query: String::new(),
@@ -503,6 +505,13 @@ impl App {
                             } else if action == "sound_preview" {
                                 self.audio_preview=None;
                                 self.status="Preescucha terminada.".into();
+                            } else if action == "verify_files" {
+                                self.state=v["state"].clone();self.profile_state=v["profile"].clone();
+                                let healed=v["healed"].as_array().map(|a|a.len()).unwrap_or(0);let modified=v["modified"].as_array().map(|a|a.len()).unwrap_or(0);
+                                self.status=if v["epic"]!=true{"No hay manifiesto de Epic (Steam): solo se comprobaron las copias de Swap Prism.".into()}else if modified>0{format!("{modified} archivo(s) modificados fuera de Swap Prism. Verifica los archivos en Epic y vuelve a comprobar.")}else if healed>0{format!("Archivos correctos. {healed} cambio(s) los había quitado Epic: vuelve a aplicarlos.")}else{"Todos los archivos están correctos.".into()};
+                                self.file_check=v;
+                            } else if action == "open_epic" {
+                                self.status="Epic abierto: Biblioteca → Rocket League → ⋯ → Gestionar → Verificar.".into();
                             } else if action == "refresh_state" {
                                 self.state=v["state"].clone();self.status="Cambios comprobados contra los archivos actuales.".into();
                             } else if action == "profile_import" {

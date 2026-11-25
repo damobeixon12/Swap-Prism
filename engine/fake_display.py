@@ -122,24 +122,29 @@ def patch_movie(movie,name,title=None,avatar=None,rank=None):
     start,body,end,pos,abc=abc_tag(movie)
     from title_display import patch_title_abc
     new,title_fields=patch_title_abc(movie[pos:end],title)
-    new,fields=patch_abc(new,name);fields+=title_fields
+    new,fields=patch_abc(new,name)
+    features={'name'} if fields else set()
+    if title_fields:features.add('title')
+    fields+=title_fields
     if rank:
         from rank_display import patch_rank_abc
         new,rank_fields=patch_rank_abc(new,rank);fields+=rank_fields
+        if rank_fields:features.add('rank')
     if avatar:
         new,scoped=patch_avatar_abc(new);fields+=scoped
+        if scoped or avatar_fields:features.add('avatar')
     fields+=avatar_fields
-    if not fields:return movie,[]
+    if not fields:return movie,[],features
     payload=movie[body:pos]+new
     tag=struct.pack('<HI',(82<<6)|63,len(payload))+payload
     result=bytearray(movie[:start]+tag+movie[end:]);struct.pack_into('<I',result,4,len(result))
     abc_tag(bytes(result))
-    return bytes(result),fields
+    return bytes(result),fields,features
 
 
 def patch_package(pkg,name='',images=None,title=None,avatar=None,rank=None):
     """Return package and exact changed exports; never installs it."""
-    name=validate_name(name);flat=pkg.flat();replacements={};movies=set();fields=[];paths=[]
+    name=validate_name(name);flat=pkg.flat();replacements={};movies=set();fields=[];paths=[];features=set()
     avatar=avatar or (images or {}).get('avatar')
     if name or title or avatar or rank:
         for i,e in enumerate(pkg.exports):
@@ -151,7 +156,7 @@ def patch_package(pkg,name='',images=None,title=None,avatar=None,rank=None):
             at=raw['value']+4;movie=data[at:at+raw['size']-4]
             # Some static GFX have no ActionScript; leave them intact.
             if not any(code==82 for code,*_ in swf_tags(movie)):continue
-            new,changed=patch_movie(movie,name,title,avatar,rank)
+            new,changed,found=patch_movie(movie,name,title,avatar,rank);features|=found
             if not changed:continue
             serial=bytearray(data[:at]+new+data[at+len(movie):])
             put32(serial,raw['value']-8,4+len(new));put32(serial,raw['value'],len(new))
@@ -167,7 +172,7 @@ def patch_package(pkg,name='',images=None,title=None,avatar=None,rank=None):
         found=[i for i,e in enumerate(pkg.exports) if pkg.class_name(e)=='Texture2D' and pkg.path(i)==allowed[key]]
         if len(found)!=1:raise ValueError('No se localiza la textura exacta del perfil.')
         i=found[0];e=pkg.exports[i];serial=flat[i64(e,36):i64(e,36)+i32(e,32)]
-        replacements[i]=inline_serial(pkg,serial,raw);paths.append(pkg.path(i))
+        replacements[i]=inline_serial(pkg,serial,raw);paths.append(pkg.path(i));features.add(key)
     if not replacements:return None,{}
     result=append_exports(pkg,replacements,swf_validator=lambda i,serial:i in movies and serial==replacements[i])
-    return result,{'only_client_presentation':True,'other_payloads_unchanged':True,'fields':sorted(set(fields)),'exports':paths,'visual_verified':False}
+    return result,{'only_client_presentation':True,'other_payloads_unchanged':True,'fields':sorted(set(fields)),'exports':paths,'features':sorted(features),'visual_verified':False}

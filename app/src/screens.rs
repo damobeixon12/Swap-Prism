@@ -399,7 +399,7 @@ impl App {
     }
 
     fn changes(&mut self, ui: &mut egui::Ui) {
-        ui.horizontal(|ui|{ui.checkbox(&mut self.changes_history,"Mostrar historial restaurado");if ui.add_enabled(!self.busy,egui::Button::new("Comprobar archivos")).clicked(){self.call("refresh_state",json!({"action":"refresh_state"}));}});
+        ui.horizontal(|ui|{ui.checkbox(&mut self.changes_history,"Mostrar historial restaurado");if ui.add_enabled(!self.busy&&self.game.is_some(),egui::Button::new("Comprobar archivos")).clicked(){self.call("verify_files",json!({"action":"verify_files","game":self.game}));}});
         let installed = self
             .state
             .as_object()
@@ -524,6 +524,19 @@ impl App {
                 d::eyebrow(ui,"ROCKET LEAGUE",d::CYAN);ui.heading("Tu juego, conectado");ui.add_space(10.);
                 if let Some(path)=&self.game{d::muted(ui,path.display().to_string());}else{d::muted(ui,"No se ha encontrado el juego. Selecciona la carpeta rocketleague, que contiene Binaries y TAGame.");}
                 if ui.button("Elegir carpeta del juego").clicked(){if let Some(path)=rfd::FileDialog::new().set_title("Elige rocketleague (contiene Binaries y TAGame)").pick_folder(){if platform::valid_game(&path){self.game=Some(path.clone());self.config["game_path"]=json!(path);self.status=platform::save_config(&self.root,&self.config).err().unwrap_or("Ruta guardada.".into());}else{self.status="Elige la carpeta rocketleague que contiene Binaries y TAGame.".into();}}}
+            });ui.add_space(12.);
+            d::card().show(ui,|ui|{
+                d::eyebrow(ui,"EMERGENCIA",d::RED);ui.heading("Verificar archivos");
+                d::muted(ui,"Si algo no se aplica o da error: compara cada paquete con el original de Epic. No borra tus cambios ni tu selección.");ui.add_space(10.);
+                ui.horizontal_wrapped(|ui|{
+                    if ui.add_enabled(!self.busy&&self.game.is_some(),egui::Button::new("Comprobar archivos")).clicked(){self.call("verify_files",json!({"action":"verify_files","game":self.game}));}
+                    if ui.add_enabled(!self.busy,egui::Button::new("Abrir Epic Games")).clicked(){self.call("open_epic",json!({"action":"open_epic"}));}
+                });
+                if let Some(list)=self.file_check["modified"].as_array(){if !list.is_empty(){
+                    ui.add_space(8.);d::muted(ui,"Modificados fuera de Swap Prism. En Epic: Biblioteca → Rocket League → ⋯ → Gestionar → Verificar. Después pulsa Comprobar archivos otra vez.");
+                    for name in list.iter().take(12){d::muted(ui,format!("• {}",name.as_str().unwrap_or("")));}
+                    if list.len()>12{d::muted(ui,format!("… y {} más",list.len()-12));}
+                }}
             });ui.add_space(12.);
             d::card().show(ui,|ui|{
                 d::eyebrow(ui,"TU CUENTA",d::PURPLE);ui.heading("Inventario local");d::muted(ui,"Se lee el último guardado de Rocket League.");ui.add_space(10.);

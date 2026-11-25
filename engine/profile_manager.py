@@ -5,7 +5,7 @@ from PIL import Image,ImageOps
 from modern_upk import Package
 from fake_display import patch_package,validate_name
 from menu_guard import require_closed
-from swap_manager import sha,load_state,write_state,pristine,filename
+from swap_manager import sha,load_state,write_state,pristine,filename,is_epic_original,MODIFIED
 from job_progress import report as progress
 
 SCHEMA=1
@@ -54,7 +54,9 @@ def normalize(root,settings):
 def _base(root,cooked,name,profile):
     entry=profile['packages'].get(name)
     if not entry:return cooked/name
-    if sha(cooked/name)!=entry['installed_sha256']:raise ValueError('El paquete de perfil cambió fuera de SWAPPRISM: '+name)
+    if sha(cooked/name)!=entry['installed_sha256']:
+        if is_epic_original(cooked,name):return cooked/name  # reset by verify/update: rebuild on the original
+        raise ValueError(MODIFIED.format(name))
     path=Path(entry['base'])
     if sha(path)!=entry['base_sha256']:raise ValueError('La base del perfil no coincide: '+name)
     return path
@@ -66,16 +68,31 @@ def _archive(root,source):
     if sha(target)!=digest:raise ValueError('No se verificó la base del perfil.')
     return target,digest
 
+SECTIONS=('name','title','rank','avatar','banner')
+
+def _unaffected(cooked,settings,profile):
+    """Profile packages that need no rebuild when only some sections changed; None means rebuild all.
+    A section switched on for the first time is unknown territory, so it forces a full scan."""
+    old=profile.get('settings',{});changed={k for k in SECTIONS if settings.get(k)!=old.get(k)}
+    packages=profile.get('packages',{})
+    if (not changed or profile.get('codec_revision')!=CODEC_REVISION or profile.get('partial') or not packages
+            or any(not old.get(k) for k in changed) or any('features' not in e for e in packages.values())):
+        return None
+    return {n for n,e in packages.items() if not set(e['features'])&changed and sha(cooked/n)==e['installed_sha256']}
+
 def _generate(api,game,settings,profile):
-    cooked=Path(game)/'TAGame/CookedPCConsole';names=set(profile['packages'])
+    cooked=Path(game)/'TAGame/CookedPCConsole'
+    keep=_unaffected(cooked,settings,profile)
+    names=set(profile['packages'])
     if settings['name'] or settings.get('title') or settings['avatar'] or settings.get('rank'):
         names.update(p.name for p in cooked.glob('*.upk') if p.name.lower().startswith('gfx') and 'sounds' not in p.name.lower())
     if settings['avatar'] or settings['banner']:names.add('Startup.upk')
     # Startup contains the shared components/code loaded by the other menus.
     if settings['name'] or settings.get('title') or settings.get('rank'):names.add('Startup.upk')
+    if keep is not None:names=set(profile['packages'])-keep
     images={k:Path(settings[k]).read_bytes() for k in ['avatar','banner'] if settings[k]}
     folder=api.ROOT/'paquetes'/('perfil-'+uuid.uuid4().hex);folder.mkdir(parents=True)
-    jobs=[];new={'schema':SCHEMA,'codec_revision':CODEC_REVISION,'settings':settings,'packages':{}}
+    jobs=[];new={'schema':SCHEMA,'codec_revision':CODEC_REVISION,'settings':settings,'packages':{n:profile['packages'][n] for n in keep or ()}}
     from concurrent.futures import ThreadPoolExecutor,as_completed
     def prepare_one(name):
         require_closed();filename(name);original=pristine(cooked,name,api.ROOT/'data')
@@ -83,7 +100,7 @@ def _generate(api,game,settings,profile):
         # Check current tracked state even when no previous profile layer exists.
         state=load_state(api.ROOT/'data').get(name)
         if state and sha(cooked/name) not in {state['original_sha256'],state['installed_sha256']}:
-            raise ValueError('Paquete cambiado fuera de SWAPPRISM: '+name)
+            raise ValueError(MODIFIED.format(name))
         # Archive by the original package name; never feed a renamed UPK to codecs.
         base,digest=_archive(api.ROOT,source)
         pkg=Package(source,api.DEFAULT_ENGINE)
@@ -91,12 +108,12 @@ def _generate(api,game,settings,profile):
         if raw is None:
             if name not in profile['packages']:return None
             raw=source.read_bytes();validation={'only_client_presentation':True,'other_payloads_unchanged':True,'exports':[]}
-        else:new['packages'][name]={'base':str(base.resolve()),'base_sha256':digest,'installed_sha256':hashlib.sha256(raw).hexdigest(),'exports':validation['exports']}
+        else:new['packages'][name]={'base':str(base.resolve()),'base_sha256':digest,'installed_sha256':hashlib.sha256(raw).hexdigest(),'exports':validation['exports'],'features':validation.get('features',[])}
         job=folder/name;(job/'generado').mkdir(parents=True);generated=job/'generado'/name;generated.write_bytes(raw)
         report={'schema':3,'kind':'profile','target':{'Product':'Perfil local','AssetPackage':name,'Slot':'Profile'},
                 'donor':{'Product':settings['name'] or 'Avatar / banner personalizado','Slot':'Profile'},
                 'original_sha256':{name:sha(original)},'generated_sha256':sha(generated),'validation':validation,
-                'profile_base_state':profile['packages'].get(name,{}).get('base_state',state)}
+                'profile_base_state':state if source==cooked/name else profile['packages'][name].get('base_state',state)}
         if name in new['packages']:new['packages'][name]['base_state']=report['profile_base_state']
         (job/'informe.json').write_text(json.dumps(report,ensure_ascii=True,indent=2),encoding='utf8');return job
     with ThreadPoolExecutor(max_workers=4,thread_name_prefix='profile-package') as pool:
@@ -123,10 +140,9 @@ def prepare(api,game,settings):
         if settings['title']['target']!=equipped:raise ValueError('Equipa el título original elegido en Rocket League y ciérralo antes de aplicar.')
     if profile.get('codec_revision')==CODEC_REVISION and not profile.get('partial') and settings==profile['settings']:
         cooked=Path(game)/'TAGame/CookedPCConsole'
-        for name,entry in profile['packages'].items():
-            if sha(cooked/name)!=entry['installed_sha256']:raise ValueError('El paquete cambió fuera de Swap Prism: '+name)
-        progress('done',1,1,'El perfil ya estaba aplicado.')
-        return [],profile
+        if all(sha(cooked/name)==entry['installed_sha256'] for name,entry in profile['packages'].items()):
+            progress('done',1,1,'El perfil ya estaba aplicado.')
+            return [],profile
     return _generate(api,game,settings,profile)
 
 def commit_jobs(api,jobs,new):
@@ -168,7 +184,7 @@ def compose_jobs(api,jobs,profile_override=None):
         if raw is None:raise ValueError('No se pudo conservar el perfil en '+name)
         source.write_bytes(raw);report['generated_sha256']=sha(source);report['profile_composition']=validation
         report_file.write_text(json.dumps(report,ensure_ascii=True,indent=2),encoding='utf8')
-        updated['packages'][name]={'base':str(base.resolve()),'base_sha256':digest,'installed_sha256':sha(source),'exports':validation['exports'],'base_state':None}
+        updated['packages'][name]={'base':str(base.resolve()),'base_sha256':digest,'installed_sha256':sha(source),'exports':validation['exports'],'features':validation.get('features',[]),'base_state':None}
         updated['_composed'].append(name)
     return updated
 

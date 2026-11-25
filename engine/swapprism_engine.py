@@ -4,7 +4,7 @@ from pathlib import Path
 from dataclasses import asdict
 import local_skins as api
 from player_inventory import load_snapshot
-from swap_manager import load_state,restore_all,inspect_state
+from swap_manager import load_state,restore_all,inspect_state,verify_files
 from texture_library import load_library,scan,save_library,image_for
 from change_queue import prepare_all,install_all
 from cosmetic_colors import PAINTS
@@ -57,6 +57,13 @@ def request(obj):
     if action=='workshop_import':return workshop.import_map(api,obj['path'])
     if action=='workshop_remove':return workshop.remove(api,obj['key'])
     if action=='refresh_state':return {'state':inspect_state(api.ROOT/'data')}
+    if action=='verify_files':
+        result=verify_files(Path(obj['game']).resolve(),api.ROOT/'data')
+        if result['healed']:profile_manager.after_restore(api.ROOT,result['healed'])
+        result['profile']=profile_manager.load(api.ROOT);return result
+    if action=='open_epic':
+        # shortcut: Epic has no documented "verify" link; this only opens the launcher.
+        os.startfile('com.epicgames.launcher://store/library');return {'opened':True}
     if action=='bootstrap':
         errors=[]
         try:

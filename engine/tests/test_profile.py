@@ -74,3 +74,30 @@ class ProfileLayer(unittest.TestCase):
         self.assertNotIn('_composed',profile.load(self.root))
 
 if __name__=='__main__':unittest.main()
+
+
+class PartialProfileRebuild(unittest.TestCase):
+    """Changing one profile section only rebuilds the packages that show it."""
+    def setUp(self):
+        self.tmp=tempfile.TemporaryDirectory();self.cooked=Path(self.tmp.name)
+        for n in ('GFX_A.upk','GFX_B.upk'):(self.cooked/n).write_bytes(n.encode())
+        title={'text':'HOLA','target':'XP'}
+        self.profile={'codec_revision':profile.CODEC_REVISION,'settings':{'name':'damo','title':title,'rank':None,'avatar':'','banner':''},
+                      'packages':{'GFX_A.upk':{'installed_sha256':profile.sha(self.cooked/'GFX_A.upk'),'features':['name']},
+                                  'GFX_B.upk':{'installed_sha256':profile.sha(self.cooked/'GFX_B.upk'),'features':['name','title']}}}
+
+    def tearDown(self):self.tmp.cleanup()
+
+    def settings(self,**change):return {**self.profile['settings'],**change}
+
+    def test_title_change_keeps_name_only_packages(self):
+        self.assertEqual(profile._unaffected(self.cooked,self.settings(title={'text':'ADIOS','target':'XP'}),self.profile),{'GFX_A.upk'})
+
+    def test_first_rank_or_old_profile_forces_full_rebuild(self):
+        self.assertIsNone(profile._unaffected(self.cooked,self.settings(rank={'tier':1}),self.profile))
+        del self.profile['packages']['GFX_A.upk']['features']
+        self.assertIsNone(profile._unaffected(self.cooked,self.settings(title={'text':'X','target':'XP'}),self.profile))
+
+    def test_package_reset_by_launcher_is_rebuilt(self):
+        (self.cooked/'GFX_A.upk').write_bytes(b'epic-original')
+        self.assertEqual(profile._unaffected(self.cooked,self.settings(title={'text':'X','target':'XP'}),self.profile),set())
