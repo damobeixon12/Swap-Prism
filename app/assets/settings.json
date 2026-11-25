@@ -1,4 +1,4 @@
 {
-  "update_manifest_url": "https://github.com/damobeixon12/Swap-Prism/releases/latest/download/update.json",
-  "release_repository": "damobeixon12/Swap-Prism"
+    "update_manifest_url":  "https://github.com/damobeixon12/Swap-Prism/releases/latest/download/update.json",
+    "release_repository":  "damobeixon12/Swap-Prism"
 }
