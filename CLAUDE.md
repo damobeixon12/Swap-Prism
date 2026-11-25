@@ -3,8 +3,8 @@
 App de Windows para personalizar Rocket League **en local**: skins, texturas, sonidos,
 perfil (nombre/avatar/títulos), fake rank, mapas de Workshop, overlay de FPS y pestaña de Tracker.
 Todo se hace editando los paquetes del juego (`.upk`, `.bnk`) con copia de seguridad y restauración byte a byte.
-Versión actual: **0.29.1** (`app/Cargo.toml`). Repo: https://github.com/damobeixon12/Swap-Prism
-(hasta ahora solo tenía README y Releases; el código aún NO está en git).
+Versión actual: **0.31.0** (`app/Cargo.toml`). Repo: https://github.com/damobeixon12/Swap-Prism
+(el código está en la rama main desde la 0.31.0).
 
 Creada originalmente con Codex. El 25/11/2026 se reorganizó entera (ver «Estado de la reorganización»).
 
