@@ -143,6 +143,8 @@ impl App{
         self.ensure_game_settings();self.watch_save();
         let tiers:Vec<(i64,usize)>=self.game_settings["skills"].as_array().map(|a|a.iter().filter_map(|s|Some((s["Playlist"].as_i64()?,s["Tier"].as_u64()? as usize))).collect()).unwrap_or_default();
         self.rank_board.lock().unwrap().tiers=tiers;
+        let keys:Vec<&str>=self.game_settings["scoreboard_keys"].as_array().into_iter().flatten().filter_map(|k|k.as_str()).collect();
+        crate::platform::set_scoreboard_keys(&keys);
         let Some(view)=&self.tracker_web else{return};
         let now=std::time::Instant::now();
         if self.tracker_polled.is_none_or(|t|now-t>Duration::from_secs(20)){

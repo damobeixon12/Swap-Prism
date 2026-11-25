@@ -135,6 +135,20 @@ def _ini_section(text):
     return start,(len(text) if nxt<0 else nxt+1)
 
 
+def bindings(data,action):
+    """Keys the player bound to an action in the save (custom bindings only; the game's defaults are not stored)."""
+    marker=sr.write_ue3(action);keys=[];at=data.find(marker)
+    while at>=0:
+        try:
+            off=at+len(marker);name,off=sr.read_ue3(data,off)
+            if name=='Key':
+                _,off=sr.read_ue3(data,off);off+=8;key,_=sr.read_ue3(data,off)
+                if key and key!='None' and key not in keys:keys.append(key)
+        except Exception:pass
+        at=data.find(marker,at+1)
+    return keys
+
+
 def read(base=None):
     files=saves(base)
     if not files:raise ValueError('No se encuentra la partida guardada de Rocket League.')
@@ -150,7 +164,7 @@ def read(base=None):
         for key,name in INI_FIELDS.items():
             line=next((l for l in text[a:b].splitlines() if l.split('=')[0].strip()==name),None)
             values[key]=None if line is None else line.split('=',1)[1].strip()
-    return {'values':values,'skills':skills,'save':str(files[0])}
+    return {'values':values,'skills':skills,'save':str(files[0]),'scoreboard_keys':bindings(bytes(save.data),'ToggleScoreboard')}
 
 
 def write(root,changes,base=None):

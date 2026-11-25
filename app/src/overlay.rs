@@ -161,10 +161,9 @@ pub fn show_ranks(ctx: &egui::Context, preferences: &Preferences, board: Arc<Mut
     });
 }
 
-/// Scoreboard row centres at 1080p, measured on the game's own Tab scoreboard (1v1): blue row 1 at -42 px from the
-/// vertical centre, orange row 1 at +86; each extra player adds one row pitch and grows the board around the centre.
-/// shortcut: pitch measured only for 1v1 (assumed 50 px); calibrate with a 2v2/3v3 screenshot if rows drift.
-const ROW_PITCH: f32 = 50.;
+/// Scoreboard row centres at 1080p, measured on the game's own scoreboard (1v1 and 2v2 captures): the last blue row sits
+/// 45 px above the vertical centre, the first orange row 87 px below; rows are 53 px apart and the blue team grows upwards.
+const ROW_PITCH: f32 = 53.;
 pub fn scoreboard_rows(rows: &[LobbyRow]) -> Vec<(&LobbyRow, f32)> {
     let size = rows.iter().filter(|r| r.team == 0).count().max(rows.iter().filter(|r| r.team == 1).count()).max(1) as f32;
     let mut out = Vec::new();
@@ -172,7 +171,7 @@ pub fn scoreboard_rows(rows: &[LobbyRow]) -> Vec<(&LobbyRow, f32)> {
         let mut members: Vec<&LobbyRow> = rows.iter().filter(|r| r.team == team).collect();
         members.sort_by(|a, b| b.score.cmp(&a.score));
         for (i, row) in members.into_iter().enumerate() {
-            let first = if team == 0 { -42. - (size - 1.) * ROW_PITCH } else { 86. };
+            let first = if team == 0 { -45. - (size - 1.) * ROW_PITCH } else { 87. };
             out.push((row, first + i as f32 * ROW_PITCH));
         }
     }
@@ -215,12 +214,13 @@ fn show_scoreboard(ctx: &egui::Context, board: Arc<Mutex<RankBoard>>) {
             let board = board.lock().unwrap();
             for (row, y) in scoreboard_rows(&board.lobby) {
                 let y = centre.y + y * s;
-                let icon = egui::Rect::from_center_size(egui::pos2(centre.x - 557. * s, y), Vec2::splat(42. * s));
+                // Rank icon just left of the photo; MMR centred in the gap between the name and the PUNTAJE column.
+                let icon = egui::Rect::from_center_size(egui::pos2(centre.x - 555. * s, y), Vec2::splat(40. * s));
                 crate::ranks::rank_icon(ui, icon, row.tier);
-                let at = egui::pos2(centre.x - 257. * s, y);
+                let at = egui::pos2(centre.x - 149. * s, y);
                 // Near-black shadow (pure black is the transparent colour key).
-                ui.painter().text(at + Vec2::splat(1.5 * s), egui::Align2::LEFT_CENTER, &row.mmr, egui::FontId::proportional(24. * s), Color32::from_rgb(12, 12, 14));
-                ui.painter().text(at, egui::Align2::LEFT_CENTER, &row.mmr, egui::FontId::proportional(24. * s), Color32::WHITE);
+                ui.painter().text(at + Vec2::splat(1.5 * s), egui::Align2::CENTER_CENTER, &row.mmr, egui::FontId::proportional(24. * s), Color32::from_rgb(12, 12, 14));
+                ui.painter().text(at, egui::Align2::CENTER_CENTER, &row.mmr, egui::FontId::proportional(24. * s), Color32::WHITE);
             }
         });
     });
@@ -480,12 +480,12 @@ mod tests {
     #[test]
     fn one_v_one_matches_measured_rows() {
         let rows = [row(0, 0), row(1, 0)];
-        assert_eq!(scoreboard_rows(&rows).iter().map(|r| r.1).collect::<Vec<_>>(), vec![-42., 86.]);
+        assert_eq!(scoreboard_rows(&rows).iter().map(|r| r.1).collect::<Vec<_>>(), vec![-45., 87.]);
     }
     #[test]
     fn rows_follow_score_order() {
         let rows = [row(0, 10), row(0, 300), row(1, 5)];
         let order: Vec<_> = scoreboard_rows(&rows).iter().map(|r| (r.0.score, r.1)).collect();
-        assert_eq!(order, vec![(300, -92.), (10, -42.), (5, 86.)]);
+        assert_eq!(order, vec![(300, -98.), (10, -45.), (5, 87.)]);
     }
 }

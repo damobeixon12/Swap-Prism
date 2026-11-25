@@ -3666,7 +3666,7 @@ dependencies = [
 
 [[package]]
 name = "swapprism"
-version = "0.31.5"
+version = "0.31.6"
 dependencies = [
  "eframe",
  "egui_extras",
