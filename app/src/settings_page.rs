@@ -145,6 +145,13 @@ impl App{
 
     pub(super) fn my_ranks(&mut self,ui:&mut egui::Ui){
         self.ensure_game_settings();
+        // The game rewrites the save after each match: reload when its timestamp moves.
+        if let Some(m)=self.game_settings["save"].as_str().and_then(|p|std::fs::metadata(p).ok()).and_then(|m|m.modified().ok()){
+            let moved=self.ranks_mtime.is_some_and(|t|t!=m);
+            if moved&&!self.busy{self.game_settings=Value::Null;self.settings_loading=false;}
+            if !moved||!self.busy{self.ranks_mtime=Some(m);}
+        }
+        ui.ctx().request_repaint_after(std::time::Duration::from_secs(5));
         let skills=self.game_settings["skills"].as_array().cloned().unwrap_or_default();
         egui::ScrollArea::vertical().id_salt("my-ranks").show(ui,|ui|{
             if skills.is_empty(){d::card().show(ui,|ui|{ui.label(RichText::new(if self.game_settings.is_null(){"Leyendo tus rangos…"}else{"Todavía no hay rangos en tu partida guardada."}).size(16.));d::muted(ui,"Juega una partida clasificatoria y cierra el juego para que aparezca aquí.");});return;}
@@ -165,7 +172,7 @@ impl App{
                 });
                 ui.add_space(gap);
             }
-            d::muted(ui,"Leído de tu partida guardada: se actualiza al cerrar Rocket League. El MMR exacto no se guarda en tu PC; para verlo usa la pestaña Tracker web.");
+            d::muted(ui,"Leído de tu partida guardada: se actualiza solo cada vez que el juego guarda (al acabar una partida o al cerrarlo). El MMR exacto no se guarda en tu PC; para verlo usa la pestaña Tracker web.");
             if ui.add_enabled(!self.busy,egui::Button::new(RichText::new("Actualizar").color(d::MUTED())).frame(false)).clicked(){self.game_settings=Value::Null;self.settings_loading=false;}
         });
     }
