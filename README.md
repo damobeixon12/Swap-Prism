@@ -1,69 +1,117 @@
+<div align="center">
+
 # Swap Prism
 
-Aplicación de personalización local para Rocket League en Windows: skins, texturas,
-sonidos, perfil (nombre, avatar, títulos), fake rank, mapas de Workshop y overlay de FPS.
-Todos los cambios son locales, reversibles y se aplican solo con el juego cerrado.
+**Visual customization and local asset management for Rocket League on Windows**
 
-## Descargar
+[![Latest version](https://img.shields.io/github/v/release/damobeixon12/Swap-Prism?label=latest%20version&color=2ea44f&logo=github)](https://github.com/damobeixon12/Swap-Prism/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/damobeixon12/Swap-Prism/total?label=downloads&color=blue)](https://github.com/damobeixon12/Swap-Prism/releases)
+[![Platform](https://img.shields.io/badge/platform-Windows-0078D6?logo=windows&logoColor=white)](#installation)
+[![Built with Rust](https://img.shields.io/badge/UI-Rust%20%2B%20egui-000000?logo=rust&logoColor=white)](#architecture)
+[![Engine](https://img.shields.io/badge/engine-Python-3776AB?logo=python&logoColor=white)](#architecture)
+[![Discord](https://img.shields.io/badge/Discord-join%20the%20community-5865F2?logo=discord&logoColor=white)](https://discord.gg/dXa24Y5HtX)
 
-El instalador está en [Releases](https://github.com/damobeixon12/Swap-Prism/releases).
-La app avisa cuando hay una versión estable nueva y se actualiza sola, conservando
-tus datos y copias de seguridad.
+<a href="https://github.com/damobeixon12/Swap-Prism/releases/latest/download/Swap-Prism-Setup.exe">
+  <img src="https://img.shields.io/badge/%E2%AC%87%EF%B8%8F%20Download%20for%20Windows-Swap--Prism--Setup.exe-2ea44f?style=for-the-badge" alt="Download Swap-Prism-Setup.exe">
+</a>
 
-Cierra Rocket League antes de aplicar o restaurar una personalización.
+<br>
 
-## Comunidad
 
-[Discord de Swap Prism](https://discord.gg/dXa24Y5HtX).
+</div>
 
 ---
 
-## Desarrollo
+## Overview
 
-### Estructura
+Swap Prism is a desktop application that lets you configure cosmetic modifications for Rocket League through a single, unified interface. It covers asset replacement, texture and audio libraries, profile customization, and Workshop map management.
 
-| Carpeta | Contenido |
-|---|---|
-| `app/` | Interfaz nativa en Rust (eframe/egui), actualizador `SWAPPRISMUpdate` e instalador NSIS (`installer.nsi`). |
-| `app/assets/` | Logo, iconos, fuentes, insignias de rango, catálogo y `THIRD_PARTY.txt`. |
-| `engine/` | Motor en Python: edición de paquetes `.upk`, bancos de sonido, perfil, cola de cambios y copias de seguridad. |
-| `engine/motor/` | Códec de paquetes (`rl_upk_editor.py`, de RLUPKTools) y base de datos de objetos. |
-| `engine/tests/` | Pruebas del motor. |
-| `scripts/` | Compilación, empaquetado y publicación. |
-| `docs/` | `PENDIENTES.md` y el historial técnico de cada versión (`docs/historial/`). |
-| `work/` | Cachés locales: toolchain de Rust, dependencias de compilación, miniaturas. **No se sube.** |
-| `outputs/` | Instalador generado y copia de desarrollo `outputs/LocalSkins` con tus datos. **No se sube.** |
+All changes are processed locally through an operation queue, with backups and restore mechanisms built in. Swap Prism modifies how the game client presents content. It does **not** grant items to your account and does **not** affect your server-side rank.
 
-La app Rust lanza el motor empaquetado (`_engine/SWAPPRISMEngine.exe`) y le pasa la
-carpeta de la app en `SWAPPRISM_ROOT`; los datos del usuario viven en `data/` junto al ejecutable.
+## Table of Contents
 
-### Compilar
+- [Download](#download)
+- [Features](#features)
+- [Architecture](#architecture)
+- [Installation](#installation)
+- [Usage](#usage)
+- [Scope and Limitations](#scope-and-limitations)
+- [Community](#community)
+- [Disclaimer](#disclaimer)
 
-Requisitos en Windows: la toolchain de Rust en `work/toolchain` (o `rustup` con
-`stable-x86_64-pc-windows-gnu`), Python 3.12 con Pillow y cryptography, y NSIS en
-`work/toolchain/nsis-3.11`.
 
-```powershell
-# Pruebas del motor
-python -m unittest discover -s engine/tests -t engine
 
-# Instalador completo (pruebas + Rust + motor + NSIS) -> outputs/Swap Prism-Setup.exe
-powershell -ExecutionPolicy Bypass -File scripts/package_swapprism.ps1
+## Download
 
-# Comprobar el instalador generado en una carpeta temporal
-powershell -ExecutionPolicy Bypass -File scripts/test_profile_installer.ps1
-```
+| | |
+| --- | --- |
+| **Latest version** | [![Latest version](https://img.shields.io/github/v/release/damobeixon12/Swap-Prism?label=&color=2ea44f)](https://github.com/damobeixon12/Swap-Prism/releases/latest) |
+| **Platform** | Windows |
+| **Installer** | [**Download Swap-Prism-Setup.exe →**](https://github.com/damobeixon12/Swap-Prism/releases/latest/download/Swap-Prism-Setup.exe) |
+| **All releases** | [View release notes and previous versions](https://github.com/damobeixon12/Swap-Prism/releases) |
 
-Si Python no se encuentra automáticamente, define `SWAPPRISM_PYTHON` con la ruta de `python.exe`.
 
-### Publicar una versión
+> [!NOTE]
+> Already have Swap Prism installed? The app includes a built-in updater, so you can update directly from within the application.
 
-1. Sube la versión en `app/Cargo.toml`.
-2. Ejecuta `Preparar update.cmd`.
-3. Sigue `COMO PUBLICAR ACTUALIZACIONES.txt`.
+> [!NOTE]
+> Already have Swap Prism installed? The app includes a built-in updater, so you can update directly from within the application.
 
-### Reglas importantes
+## Features
 
-- Nunca escribir paquetes del juego con Rocket League abierto.
-- No subir datos personales: `outputs/`, `data/`, copias del juego (`.upk`, `.bnk`) ni sonidos.
-- Cada cambio de un paquete guarda el original y debe poder restaurarse byte a byte.
+| Feature | Description |
+| --- | --- |
+| **Cosmetic customization** | Manage visual swaps for supported items. |
+| **Textures** | Import and organize decal, ball, and boost meter textures. |
+| **Audio** | Import MP3 files, preview them, select the clip segment, and adjust volume for supported in-game events. |
+| **Profile and titles** | Locally customize your name, avatar, and titles. |
+| **Fake Rank** | Configure a visual rank, division, and MMR, fully independent of your real competitive ranking. |
+| **Workshop** | Browse a map catalog with preview images, then download and import maps. Maps are applied exclusively to Utopia Retro / Wheel Ball. |
+| **FPS overlay** | On-screen counter with configurable position, size, and color. |
+| **Change management** | Persistent queue, automatic replacement of duplicate selections, and restoration of original assets. |
+| **Built-in updates** | Stable-release detection, progress-tracked downloads, SHA-256 verification, and installation with automatic restart. |
+
+## Architecture
+
+Swap Prism combines two components:
+
+- **Native interface:** built with Rust and [egui](https://github.com/emilk/egui).
+- **Asset processing engine:** packaged with Python.
+
+Operations run in the background and communicate through structured JSON messages. The engine performs compatibility and integrity checks, creates backups, and applies changes transactionally.
+
+The application is distributed with an NSIS installer and a native update component. **Neither Rust nor Python needs to be installed** to use it.
+
+## Installation
+
+1. Download the installer from the [Download](#download) section above.
+2. Run the installer and launch Swap Prism.
+
+Updates preserve your existing selections, libraries, and backups.
+
+## Usage
+
+1. Open Swap Prism and verify the Rocket League installation folder detected by the application.
+2. Select your desired customizations and add them to **Apply changes**.
+3. **Close Rocket League** before applying or restoring assets.
+4. Apply the changes.
+5. Launch the game to verify the result.
+
+> [!IMPORTANT]
+> Rocket League must be closed whenever you apply or restore assets.
+
+## Scope and Limitations
+
+- All modifications are local. Their visibility depends on the asset type and the in-game screen.
+- Fake Rank does not alter matchmaking, rewards, or your actual MMR.
+- Workshop maps are applied only to Utopia Retro / Wheel Ball.
+
+## Community
+
+Join the Discord server to follow announcements, share configurations, and report bugs.
+
+[**Join the Swap Prism Discord →**](https://discord.gg/dXa24Y5HtX)
+
+## Disclaimer
+
+Swap Prism is an independent project and is not affiliated with, endorsed by, or sponsored by Psyonix or Epic Games.
