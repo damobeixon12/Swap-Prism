@@ -110,39 +110,6 @@ impl App{
         });
     }
 
-    pub(super) fn launcher_page(&mut self,ui:&mut egui::Ui){
-        if self.launcher_state.is_null()&&!self.launcher_loading&&!self.busy{self.launcher_loading=true;self.call("launcher_status",json!({"action":"launcher_status","game":self.game}));}
-        egui::ScrollArea::vertical().id_salt("launcher").show(ui,|ui|{
-            ui.set_max_width(ui.available_width().min(830.));
-            d::card().inner_margin(24).show(ui,|ui|{
-                ui.label(RichText::new("Rocket League").size(22.).strong());
-                d::muted(ui,match&self.game{Some(p)=>p.display().to_string(),None=>"Elige la carpeta del juego en Ajustes.".into()});
-                ui.add_space(14.);
-                ui.horizontal(|ui|{
-                    let can=self.game.is_some()&&!self.busy&&!self.running;
-                    if ui.add_enabled(can,d::primary("  Jugar  ").min_size(Vec2::new(140.,44.))).on_disabled_hover_text(if self.running{"Rocket League ya está abierto."}else{"Elige la carpeta del juego en Ajustes."}).clicked(){self.call("launcher_play",json!({"action":"launcher_play","game":self.game}));}
-                    d::muted(ui,"Abre RocketLeague.exe directamente.");
-                });
-            });
-            ui.add_space(14.);
-            d::card().inner_margin(24).show(ui,|ui|{
-                ui.label(RichText::new("Jugar desde Steam").size(18.).strong());
-                d::muted(ui,"Añade el .exe de Rocket League a Steam como juego externo (no hace falta tenerlo en Steam). Así puedes usar Steam Input para configurar el mando y la superposición de Steam.");
-                ui.add_space(10.);
-                let steam=self.launcher_state["steam"]==true;let added=self.launcher_state["in_steam"]==true;
-                if !steam&&!self.launcher_state.is_null(){ui.label(RichText::new("Steam no está instalado en este PC.").color(d::MUTED()));}
-                ui.horizontal_wrapped(|ui|{
-                    let can=steam&&self.game.is_some()&&!self.busy&&!self.running;
-                    if !added&&ui.add_enabled(can,d::button("Añadir a Steam",d::TEXT())).clicked(){self.call("launcher_steam_add",json!({"action":"launcher_steam_add","game":self.game}));}
-                    if ui.add_enabled(can,d::button("Jugar desde Steam",d::GREEN())).clicked(){self.call("launcher_steam_play",json!({"action":"launcher_steam_play","game":self.game}));}
-                    if added{ui.horizontal(|ui|{let(r,_)=ui.allocate_exact_size(Vec2::new(10.,18.),egui::Sense::hover());ui.painter().circle_filled(r.center(),3.5,d::GREEN());ui.label(RichText::new("Ya está en tu biblioteca de Steam").size(14.).color(d::MUTED()));});}
-                });
-                ui.add_space(6.);
-                d::muted(ui,"Para añadirlo, Steam tiene que estar cerrado del todo. Epic puede seguir pidiéndote iniciar sesión al arrancar.");
-            });
-        });
-    }
-
     /// The game rewrites the save after each match: reload when its timestamp moves.
     pub(super) fn watch_save(&mut self){
         if let Some(m)=self.game_settings["save"].as_str().and_then(|p|std::fs::metadata(p).ok()).and_then(|m|m.modified().ok()){

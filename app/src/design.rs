@@ -89,6 +89,10 @@ pub fn setup(ctx: &egui::Context) {
     let mut fonts=egui::FontDefinitions::default();
     fonts.font_data.insert("Nunito".into(),egui::FontData::from_static(include_bytes!("../assets/fonts/Nunito-Medium.ttf")).into());
     fonts.families.get_mut(&egui::FontFamily::Proportional).unwrap().insert(0,"Nunito".into());
+    // Display weight for titles: Windows' own Segoe UI Bold, read at runtime (not shipped). Falls back to Nunito.
+    let mut bold=vec!["Nunito".to_owned()];
+    if let Ok(bytes)=std::fs::read("C:/Windows/Fonts/segoeuib.ttf"){fonts.font_data.insert("Display".into(),egui::FontData::from_owned(bytes).into());bold.insert(0,"Display".into());}
+    fonts.families.insert(egui::FontFamily::Name("Bold".into()),bold);
     if let Ok(bytes)=std::fs::read("C:/Windows/Fonts/segoeui.ttf"){
         fonts.font_data.insert("Symbol fallback".into(),egui::FontData::from_owned(bytes).into());
         fonts.families.get_mut(&egui::FontFamily::Proportional).unwrap().insert(1,"Symbol fallback".into());
@@ -120,13 +124,15 @@ impl Surface {
         response
     }
 }
+pub fn bold(size: f32) -> egui::FontId {
+    egui::FontId::new(size, egui::FontFamily::Name("Bold".into()))
+}
 pub fn card() -> Surface {
     Surface(
         egui::Frame::new()
             .fill(PANEL())
             .corner_radius(12)
-            .inner_margin(20)
-            .stroke(Stroke::new(1_f32, LINE())),
+            .inner_margin(20),
     )
 }
 pub fn button(label: &str, tone: Color32) -> egui::Button<'_> {

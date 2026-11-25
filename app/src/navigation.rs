@@ -1,11 +1,13 @@
 use super::*;
 use crate::design as d;
 
-/// Sidebar entries: (section key, label). Sub-pages live in tabs inside each page.
-pub(super) const NAV:[(&str,&str);12]=[
-    ("Home","Inicio"),("Play","Jugar"),("Skins","Skins"),("Texturas","Texturas"),("Fake","Perfil"),("Studio","Sonidos y colores"),
-    ("Workshop","Mapas"),("MySettings","Mis ajustes"),("Overlay","Overlay"),("Tracker","Tracker"),("Queue","Cambios"),("Settings","Ajustes"),
+/// Sidebar entries: (section key, label). Sub-pages live in tabs inside each page. Inicio is also the launcher.
+pub(super) const NAV:[(&str,&str);11]=[
+    ("Home","Inicio"),("Skins","Skins"),("Texturas","Texturas"),("Studio","Sonidos y colores"),("Fake","Perfil"),
+    ("MySettings","Mis ajustes"),("Overlay","Overlay"),("Tracker","Tracker"),("Workshop","Mapas"),("Queue","Cambios"),("Settings","Ajustes"),
 ];
+/// Group heading printed before the first entry of each group.
+fn group(key:&str)->Option<&'static str>{match key{"Skins"=>Some("PERSONALIZAR"),"MySettings"=>Some("PARTIDA"),"Queue"=>Some("APP"),_=>None}}
 
 fn row(ui:&mut egui::Ui,key:&str,label:&str,selected:bool,badge:usize)->bool{
     ui.push_id(("navigation-row",key),|ui|{
@@ -34,6 +36,7 @@ impl App{
         let query=self.navigation_search.to_lowercase();let pending=self.pending_count();
         for(key,label)in NAV{
             if !query.is_empty()&&!label.to_lowercase().contains(&query){continue;}
+            if let Some(title)=group(key).filter(|_|query.is_empty()){ui.add_space(14.);ui.label(RichText::new(title).size(11.).color(d::MUTED()));ui.add_space(4.);}
             if row(ui,key,label,self.section==key,if key=="Queue"{pending}else{0}){self.go_to(key);self.navigation_search.clear();}
         }
     }

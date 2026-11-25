@@ -32,14 +32,9 @@ impl App {
                 });
             });
         ctx.layer_painter(egui::LayerId::new(egui::Order::Foreground,egui::Id::new("sidebar-edge"))).vline(side.response.rect.right(),side.response.rect.y_range(),egui::Stroke::new(1_f32,d::LINE()));
-        egui::TopBottomPanel::bottom("status").frame(egui::Frame::new().fill(d::BACKGROUND()).inner_margin(egui::Margin::symmetric(40,10))).show(ctx,|ui|{
-            ui.horizontal_wrapped(|ui|{
-                if self.busy{ui.spinner();}
-                ui.label(RichText::new(&self.status).size(13.).color(d::MUTED()));
-                if let Some(fraction)=self.job_fraction{ui.add(egui::ProgressBar::new(fraction).desired_width(150.).show_percentage());}
-            });
-        });
-        egui::TopBottomPanel::top("header").frame(egui::Frame::new().fill(d::BACKGROUND()).inner_margin(egui::Margin{left:40,right:40,top:26,bottom:0})).show(ctx,|ui|{
+        self.toast(ctx);
+        let home=self.section=="Home";
+        if !home{egui::TopBottomPanel::top("header").frame(egui::Frame::new().fill(d::BACKGROUND()).inner_margin(egui::Margin{left:40,right:40,top:26,bottom:0})).show(ctx,|ui|{
             ui.horizontal(|ui|{
                 let title=if self.section=="Community"{"Discord"}else{crate::navigation::NAV.iter().find(|(k,_)|*k==self.section).map(|(_,l)|*l).unwrap_or("Ajustes")};
                 ui.label(RichText::new(title).size(30.).strong());
@@ -51,10 +46,10 @@ impl App {
             });
             ui.add_space(18.);
             self.section_tabs(ui);
-        });
+        });}
         let pending=self.pending_count();
         egui::CentralPanel::default()
-            .frame(egui::Frame::new().fill(d::BACKGROUND()).inner_margin(egui::Margin{left:40,right:40,top:0,bottom:if pending>0{74}else{12}}))
+            .frame(egui::Frame::new().fill(d::BACKGROUND()).inner_margin(if home{egui::Margin{left:0,right:0,top:0,bottom:if pending>0{74}else{0}}}else{egui::Margin{left:40,right:40,top:0,bottom:if pending>0{74}else{12}}}))
             .show(ctx, |ui| {
                 let page=format!("{}:{}:{}:{}:{}:{}:{}",self.section,self.view,self.texture_category,self.fake_tab,self.overlay_tab,self.studio_tab,self.studio_sound_kind);
                 if self.page_motion_key!=page{self.page_motion_key=page;self.page_motion_start=Instant::now();}
@@ -70,7 +65,7 @@ impl App {
                 "Workshop" => self.workshop_editor(ui),
                 "Tracker" if self.tracker_tab == 0 => self.my_ranks(ui),
                 "Tracker" => self.tracker_editor(ui),
-                "Play" => self.launcher_page(ui),
+                "Play" => self.home(ui),
                 "MySettings" => self.my_settings(ui),
                 "Community" => self.community(ui),
                 "Fake" if self.fake_tab == 1 => self.profile_editor(ui),
@@ -117,6 +112,27 @@ impl App {
         }
     }
 
+    /// Status as a floating notice: shows on change (and while working), fades after a few seconds.
+    fn toast(&mut self,ctx:&egui::Context){
+        if self.status!=self.toast_text{self.toast_text=self.status.clone();self.toast_at=Instant::now();}
+        let age=self.toast_at.elapsed().as_secs_f32();
+        let alpha=if self.busy{1.}else{(1.-(age-4.)/0.6).clamp(0.,1.)};
+        if alpha<=0.||self.toast_text.is_empty(){return;}
+        if alpha<1.||!self.busy{ctx.request_repaint_after(Duration::from_millis(60));}
+        egui::Area::new(egui::Id::new("toast")).anchor(egui::Align2::RIGHT_BOTTOM,Vec2::new(-24.,-24.)).order(egui::Order::Foreground).interactable(false).show(ctx,|ui|{
+            ui.multiply_opacity(alpha);
+            egui::Frame::new().fill(d::PANEL()).corner_radius(10).inner_margin(egui::Margin::symmetric(16,10))
+                .shadow(egui::Shadow{offset:[0,6],blur:20,spread:0,color:Color32::from_black_alpha(100)}).show(ui,|ui|{
+                ui.set_max_width(420.);
+                ui.horizontal(|ui|{
+                    if self.busy{ui.spinner();}
+                    ui.label(RichText::new(&self.toast_text).size(13.5).color(d::TEXT()));
+                    if let Some(fraction)=self.job_fraction{ui.add(egui::ProgressBar::new(fraction).desired_width(120.).show_percentage());}
+                });
+            });
+        });
+    }
+
     /// Floating «N cambios sin aplicar · Descartar · Aplicar» bar.
     fn apply_bar(&mut self,ctx:&egui::Context,count:usize){
         egui::Area::new(egui::Id::new("apply-bar")).anchor(egui::Align2::CENTER_BOTTOM,Vec2::new(125.,-46.)).order(egui::Order::Foreground).show(ctx,|ui|{
@@ -144,26 +160,86 @@ impl App {
         self.status="Cambios pendientes descartados.".into();
     }
 
+    /// Inicio is the launcher: a big cover, your profile and a Play button. Quick access below.
     fn home(&mut self, ui: &mut egui::Ui) {
+        if self.launcher_state.is_null()&&!self.launcher_loading&&!self.busy{self.launcher_loading=true;self.call("launcher_status",json!({"action":"launcher_status","game":self.game}));}
+        self.ensure_game_settings();
         egui::ScrollArea::vertical().id_salt("home-scroll").show(ui,|ui|{
-            let active=self.state.as_object().map(|m|m.values().filter(|v|s(v,"status")=="installed"&&s(v,"observed_status")!="original"&&s(&v["target_item"],"Slot")!="Profile"&&v["hud_display_companion"]!=true).count()).unwrap_or(0)+usize::from(self.profile_active());
-            let pending=self.pending_count();
-            let gap=14.;let width=((ui.available_width()-gap*2.)/3.).max(150.);
-            ui.with_layout(egui::Layout::left_to_right(egui::Align::Min),|ui|{
-                ui.spacing_mut().item_spacing.x=gap;
-                for(label,value,color)in[
-                    ("Rocket League",if self.running{"Abierto".to_owned()}else{"Cerrado".to_owned()},if self.running{d::RED()}else{d::GREEN()}),
-                    ("Cambios activos",active.to_string(),d::TEXT()),
-                    ("Sin aplicar",pending.to_string(),if pending>0{d::GREEN()}else{d::TEXT()}),
-                ]{
-                    ui.allocate_ui_with_layout(Vec2::new(width,0.),egui::Layout::top_down(egui::Align::Min),|ui|{d::card().show(ui,|ui|{
-                        ui.set_width(width-42.);
-                        ui.label(RichText::new(label).size(13.).color(d::MUTED()));ui.add_space(4.);
-                        ui.label(RichText::new(value).size(26.).strong().color(color));
-                    });});
-                }
-            });
-            ui.add_space(26.);
+            let width=ui.available_width();let height=(ui.ctx().screen_rect().height()*0.6).clamp(320.,640.);
+            let(rect,_)=ui.allocate_exact_size(Vec2::new(width,height),egui::Sense::hover());
+            self.hero_background(ui,rect);
+            // Shade the lower part so text stays readable on any picture.
+            let fade=egui::Rect::from_min_max(egui::pos2(rect.left(),rect.top()+rect.height()*0.35),rect.max);
+            gradient(ui.painter(),fade,Color32::TRANSPARENT,d::BACKGROUND());
+            let painter=ui.painter_at(rect);let left=rect.left()+44.;let bottom=rect.bottom()-40.;
+            painter.text(egui::pos2(left,bottom-150.),egui::Align2::LEFT_BOTTOM,"ROCKET LEAGUE",egui::FontId::proportional(14.),Color32::from_white_alpha(190));
+            painter.text(egui::pos2(left,bottom-92.),egui::Align2::LEFT_BOTTOM,if self.running{"En partida"}else{"Listo para jugar"},d::bold(46.),Color32::WHITE);
+            // Profile line: avatar, name, title and real rank.
+            let settings=&self.profile_state["settings"];
+            let name=if s(settings,"name").is_empty(){s(&self.snapshot,"player_name").to_owned()}else{s(settings,"name").to_owned()};
+            let avatar=egui::Rect::from_min_size(egui::pos2(left,bottom-72.),Vec2::splat(56.));
+            match settings["avatar"].as_str().filter(|p|Path::new(p).is_file()){
+                Some(path)=>{egui::Image::from_uri(format!("file://{path}")).corner_radius(28).paint_at(ui,avatar);}
+                None=>{painter.circle_filled(avatar.center(),28.,d::PANEL());painter.text(avatar.center(),egui::Align2::CENTER_CENTER,name.chars().next().unwrap_or('S').to_uppercase().to_string(),d::bold(22.),d::TEXT());}
+            }
+            painter.text(egui::pos2(avatar.right()+14.,avatar.center().y-2.),egui::Align2::LEFT_BOTTOM,if name.is_empty(){"Tu perfil"}else{&name},d::bold(20.),Color32::WHITE);
+            let title=s(&settings["title"],"text");
+            if !title.is_empty(){painter.text(egui::pos2(avatar.right()+14.,avatar.center().y+2.),egui::Align2::LEFT_TOP,title,egui::FontId::proportional(14.),d::GREEN());}
+            let tier=self.game_settings["skills"].as_array().and_then(|a|a.iter().find(|s|s["Playlist"].as_i64()==Some(11))).and_then(|s|s["Tier"].as_u64()).unwrap_or(0) as usize;
+            if tier>0{
+                let x=avatar.right()+14.+painter.layout_no_wrap(name.clone(),d::bold(20.),Color32::WHITE).size().x.max(painter.layout_no_wrap(title.to_owned(),egui::FontId::proportional(14.),Color32::WHITE).size().x)+22.;
+                let icon=egui::Rect::from_center_size(egui::pos2(x+18.,avatar.center().y),Vec2::splat(40.));crate::ranks::rank_icon(ui,icon,tier);
+                painter.text(egui::pos2(icon.right()+6.,avatar.center().y),egui::Align2::LEFT_CENTER,format!("2v2 · {}",crate::ranks::tier_label(tier)),egui::FontId::proportional(14.),Color32::from_white_alpha(210));
+            }
+            // Play button and Steam option, bottom right.
+            let play=egui::Rect::from_min_size(egui::pos2(rect.right()-44.-230.,bottom-96.),Vec2::new(230.,62.));
+            let can=self.game.is_some()&&!self.busy&&!self.running;
+            let response=pill(ui,play,if self.running{"JUGANDO"}else{"JUGAR"},d::bold(24.),d::GREEN(),d::ON_ACCENT(),can);
+            let response=if self.running{response.on_hover_text("Rocket League ya está abierto.")}else if self.game.is_none(){response.on_hover_text("Elige la carpeta del juego en Ajustes.")}else{response};
+            if response.clicked(){self.call("launcher_play",json!({"action":"launcher_play","game":self.game}));}
+            let steam=self.launcher_state["steam"]==true;let added=self.launcher_state["in_steam"]==true;
+            if steam{
+                let link=egui::Rect::from_min_size(egui::pos2(play.left(),play.bottom()+10.),Vec2::new(play.width(),22.));
+                ui.scope_builder(egui::UiBuilder::new().max_rect(link).layout(egui::Layout::top_down(egui::Align::Center)),|ui|{
+                    let text=if added{"Jugar desde Steam"}else{"Añadir a Steam"};
+                    let response=ui.add_enabled(can,egui::Label::new(RichText::new(text).size(14.).color(Color32::from_white_alpha(200))).sense(egui::Sense::click()));
+                    let response=if added{response}else{response.on_hover_text("Steam tiene que estar cerrado del todo.")};
+                    if response.on_hover_cursor(egui::CursorIcon::PointingHand).clicked(){let action=if added{"launcher_steam_play"}else{"launcher_steam_add"};self.call(action,json!({"action":action,"game":self.game}));}
+                });
+            }
+            // Change the cover picture, top right.
+            let change=egui::Rect::from_min_size(egui::pos2(rect.right()-44.-150.,rect.top()+24.),Vec2::new(150.,32.));
+            if pill(ui,change,"Cambiar imagen",egui::FontId::proportional(13.),Color32::from_black_alpha(120),Color32::WHITE,true).clicked(){
+                if let Some(path)=rfd::FileDialog::new().add_filter("Imagen",&["png","jpg","jpeg","webp"]).pick_file(){self.config["home_image"]=json!(path);self.status=platform::save_config(&self.root,&self.config).err().unwrap_or("Imagen de Inicio guardada.".into());}
+            }
+            // Placed from the cover's edge: the buttons above moved the layout cursor.
+            ui.scope_builder(egui::UiBuilder::new().max_rect(egui::Rect::from_min_size(egui::pos2(rect.left()+44.,rect.bottom()+28.),Vec2::new(width-88.,10000.))),|ui|self.quick_access(ui));
+            ui.add_space(28.);
+        });
+    }
+
+    /// The user's cover picture, cropped to fill; a night-sky gradient when there is none.
+    fn hero_background(&self,ui:&egui::Ui,rect:egui::Rect){
+        if let Some(path)=self.config["home_image"].as_str().filter(|p|Path::new(p).is_file()){
+            if let Ok(egui::load::TexturePoll::Ready{texture})=egui::Image::from_uri(format!("file://{path}")).load_for_size(ui.ctx(),rect.size()){
+                let k=(rect.width()/texture.size.x).max(rect.height()/texture.size.y);
+                let visible=Vec2::new(rect.width()/k/texture.size.x,rect.height()/k/texture.size.y);
+                ui.painter().image(texture.id,rect,egui::Rect::from_min_size(egui::pos2((1.-visible.x)/2.,(1.-visible.y)/2.),visible),Color32::WHITE);
+                return;
+            }
+        }
+        gradient(ui.painter(),rect,Color32::from_rgb(10,16,34),Color32::from_rgb(38,58,82));
+        // Fixed pseudo-random stars so the sky does not flicker between frames.
+        let mut seed=0x2545f491u32;
+        for _ in 0..90{
+            seed^=seed<<13;seed^=seed>>17;seed^=seed<<5;let x=(seed%10000)as f32/10000.;
+            seed^=seed<<13;seed^=seed>>17;seed^=seed<<5;let y=(seed%10000)as f32/10000.;
+            ui.painter().circle_filled(egui::pos2(rect.left()+x*rect.width(),rect.top()+y*rect.height()*0.6),if seed%7==0{1.4}else{0.8},Color32::from_white_alpha(if seed%3==0{170}else{90}));
+        }
+    }
+
+    fn quick_access(&mut self,ui:&mut egui::Ui){
+            let gap=14.;
             ui.label(RichText::new("Accesos rápidos").size(15.).color(d::MUTED()));ui.add_space(10.);
             const CARDS:[(&str,&str,&str);6]=[
                 ("Skins","Skins","Cambia la apariencia de un objeto de tu inventario"),
@@ -194,7 +270,6 @@ impl App {
                 });
                 ui.add_space(gap);
             }
-        });
     }
 
     fn preview_at(&self, ui: &mut egui::Ui, rect: egui::Rect, row: &Value) {
@@ -229,73 +304,42 @@ impl App {
         }
         let mut choice = None;
         let equipped = self.equipped(&self.view).and_then(|v| v["ID"].as_u64());
+        // Grid of tiles: picture first, name under it.
+        let gap = 10.;
+        let per = ((ui.available_width() + gap) / (132. + gap)).floor().max(1.) as usize;
+        let tile = Vec2::new((ui.available_width() - gap * (per - 1) as f32) / per as f32, 150.);
+        let lines = rows.len().div_ceil(per);
         egui::ScrollArea::vertical()
             .id_salt(id)
             .max_height(ui.available_height().max(120.))
-            .show_rows(ui, 68., rows.len(), |ui, range| {
-                for i in range {
-                    let row = &rows[i];
-                    let is_selected = selected == row["ID"].as_u64();
-                    let (rect, response) = ui.allocate_exact_size(
-                        Vec2::new(ui.available_width(), 62.),
-                        egui::Sense::click(),
-                    );
-                    ui.painter().rect_filled(
-                        rect,
-                        11,
-                        if is_selected {
-                            d::GREEN().gamma_multiply(0.22)
-                        } else if response.hovered() {
-                            d::FIELD()
-                        } else {
-                            d::PANEL()
-                        },
-                    );
-                    self.preview_at(
-                        ui,
-                        egui::Rect::from_min_size(rect.min + Vec2::new(8., 7.), Vec2::splat(48.)),
-                        row,
-                    );
-                    let label_rect = egui::Rect::from_min_max(
-                        rect.min + Vec2::new(68., 9.),
-                        rect.max - Vec2::new(8., 25.),
-                    );
-                    ui.painter()
-                        .with_clip_rect(label_rect.intersect(ui.clip_rect()))
-                        .text(
-                            label_rect.left_top(),
-                            egui::Align2::LEFT_TOP,
-                            s(row, "Product"),
-                            egui::FontId::proportional(15.),
-                            d::TEXT(),
-                        );
-                    let note = format!(
-                        "#{}{}{}",
-                        row["ID"],
-                        if id == "owned" && equipped == row["ID"].as_u64() {
-                            "  ·  Equipado"
-                        } else {
-                            ""
-                        },
-                        if s(row, "AssetPackage").is_empty() {
-                            "  ·  Solo consulta"
-                        } else {
-                            ""
+            .show_rows(ui, tile.y, lines, |ui, range| {
+                ui.spacing_mut().item_spacing = Vec2::splat(gap);
+                for line in range {
+                    ui.horizontal(|ui| {
+                        for row in &rows[line * per..((line + 1) * per).min(rows.len())] {
+                            let is_selected = selected == row["ID"].as_u64();
+                            let (rect, response) = ui.allocate_exact_size(tile, egui::Sense::click());
+                            let hover = ui.ctx().animate_bool_with_time(response.id.with("hover"), response.hovered(), 0.12);
+                            ui.painter().rect_filled(rect, 12, if is_selected { d::GREEN().gamma_multiply(0.22) } else { d::PANEL() });
+                            if hover > 0. { ui.painter().rect_filled(rect, 12, d::FIELD().gamma_multiply(hover)); }
+                            if is_selected { ui.painter().rect_stroke(rect, 12, egui::Stroke::new(1.5_f32, d::GREEN()), egui::StrokeKind::Inside); }
+                            let side = (tile.x - 24.).min(96.);
+                            self.preview_at(ui, egui::Rect::from_center_size(egui::pos2(rect.center().x, rect.top() + 12. + side / 2.), Vec2::splat(side)), row);
+                            let mut job = egui::text::LayoutJob::simple(s(row, "Product").to_owned(), egui::FontId::proportional(13.5), d::TEXT(), tile.x - 16.);
+                            job.wrap.max_rows = 2;
+                            job.halign = egui::Align::Center;
+                            let galley = ui.painter().layout_job(job);
+                            ui.painter().galley(egui::pos2(rect.center().x, rect.top() + 18. + side), galley, d::TEXT());
+                            if id == "owned" && equipped == row["ID"].as_u64() {
+                                ui.painter().circle_filled(rect.right_top() + Vec2::new(-12., 12.), 4., d::GREEN());
+                            }
+                            if response.clicked() { choice = Some(row.clone()); }
+                            if self.design_dir.is_none() {
+                                let note = format!("{}  ·  #{}{}{}", s(row, "Product"), row["ID"], if id == "owned" && equipped == row["ID"].as_u64() { "  ·  Equipado" } else { "" }, if s(row, "AssetPackage").is_empty() { "  ·  Solo consulta" } else { "" });
+                                response.on_hover_text(note);
+                            }
                         }
-                    );
-                    ui.painter().text(
-                        rect.min + Vec2::new(68., 42.),
-                        egui::Align2::LEFT_CENTER,
-                        note,
-                        egui::FontId::proportional(13.),
-                        d::MUTED(),
-                    );
-                    if response.clicked() {
-                        choice = Some(row.clone());
-                    }
-                    if self.design_dir.is_none() {
-                        response.on_hover_text(s(row, "Product"));
-                    }
+                    });
                 }
             });
         choice
@@ -656,3 +700,19 @@ impl App {
     }
 }
 
+/// Rounded button painted at an exact rect with centred text; does not move the layout cursor.
+fn pill(ui:&mut egui::Ui,rect:egui::Rect,text:&str,font:egui::FontId,fill:Color32,color:Color32,enabled:bool)->egui::Response{
+    let response=ui.interact(rect,ui.id().with(("pill",text)),if enabled{egui::Sense::click()}else{egui::Sense::hover()});
+    let hover=ui.ctx().animate_bool_with_time(response.id.with("hover"),enabled&&response.hovered(),0.12);
+    let fill=if enabled{fill.gamma_multiply(1.+hover*0.15)}else{fill.gamma_multiply(0.45)};
+    ui.painter().rect_filled(rect.expand(hover*2.),rect.height()/2.,fill);
+    ui.painter().text(rect.center(),egui::Align2::CENTER_CENTER,text,font,if enabled{color}else{color.gamma_multiply(0.7)});
+    if enabled{response.on_hover_cursor(egui::CursorIcon::PointingHand)}else{response}
+}
+
+/// Vertical colour ramp over a rectangle.
+fn gradient(painter:&egui::Painter,rect:egui::Rect,top:Color32,bottom:Color32){
+    let mut mesh=egui::Mesh::default();
+    mesh.colored_vertex(rect.left_top(),top);mesh.colored_vertex(rect.right_top(),top);mesh.colored_vertex(rect.right_bottom(),bottom);mesh.colored_vertex(rect.left_bottom(),bottom);
+    mesh.add_triangle(0,1,2);mesh.add_triangle(0,2,3);painter.add(mesh);
+}
