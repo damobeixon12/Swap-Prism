@@ -10,7 +10,7 @@ impl App {
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center),|ui|{
                 if ui.add_enabled(!self.busy,egui::Button::new("Actualizar")).clicked(){self.call("workshop_catalog",json!({"action":"workshop_catalog","refresh":true}));}
                 if ui.add_enabled(!self.busy,egui::Button::new("Importar…")).clicked(){if let Some(path)=rfd::FileDialog::new().add_filter("Mapas",&["zip","udk","upk"]).pick_file(){self.call("workshop_import",json!({"action":"workshop_import","path":path}));}}
-                if ui.add_enabled(active&&!self.busy,egui::Button::new(RichText::new("Restaurar original").color(d::RED))).clicked(){self.queue_plan("workshop".into(),json!({"kind":"workshop_restore","category":"Workshop","target":"Labs_Utopia_P.upk","label":"Restaurar Utopia Retro"}));self.save_queue();}
+                if ui.add_enabled(active&&!self.busy,egui::Button::new(RichText::new("Restaurar original").color(d::RED()))).clicked(){self.queue_plan("workshop".into(),json!({"kind":"workshop_restore","category":"Workshop","target":"Labs_Utopia_P.upk","label":"Restaurar Utopia Retro"}));self.save_queue();}
             });
         });
         ui.add_space(8.);
@@ -34,14 +34,14 @@ impl App {
                 d::card().inner_margin(8).show(ui,|ui|{
                     ui.set_min_width(ui.available_width());
                     let(rect,_)=ui.allocate_exact_size(Vec2::new(ui.available_width(),115.),egui::Sense::hover());
-                    ui.painter().rect_filled(rect,5,d::FIELD);
-                    if let Some(path)=item["preview"].as_str(){egui::Image::from_uri(format!("file://{path}")).fit_to_exact_size(rect.size()).corner_radius(5).paint_at(ui,rect);}else{crate::icons::paint(ui,egui::Rect::from_center_size(rect.center(),Vec2::splat(28.)),"Workshop",d::MUTED);}
-                    if is_active||is_pending{ui.painter().rect_filled(egui::Rect::from_min_size(rect.min+Vec2::splat(6.),Vec2::new(78.,22.)),4,d::GREEN);ui.painter().text(rect.min+Vec2::new(45.,17.),egui::Align2::CENTER_CENTER,if is_pending{"PENDIENTE"}else{"ACTIVO"},egui::FontId::proportional(10.),d::BACKGROUND);}
+                    ui.painter().rect_filled(rect,5,d::FIELD());
+                    if let Some(path)=item["preview"].as_str(){egui::Image::from_uri(format!("file://{path}")).fit_to_exact_size(rect.size()).corner_radius(5).paint_at(ui,rect);}else{crate::icons::paint(ui,egui::Rect::from_center_size(rect.center(),Vec2::splat(28.)),"Workshop",d::MUTED());}
+                    if is_active||is_pending{ui.painter().rect_filled(egui::Rect::from_min_size(rect.min+Vec2::splat(6.),Vec2::new(78.,22.)),4,d::GREEN());ui.painter().text(rect.min+Vec2::new(45.,17.),egui::Align2::CENTER_CENTER,if is_pending{"PENDIENTE"}else{"ACTIVO"},egui::FontId::proportional(10.),d::BACKGROUND());}
                     ui.add(egui::Label::new(RichText::new(s(item,"name")).strong()).truncate()).on_hover_text(s(item,"description"));
                     d::muted(ui,s(item,"source"));
                     if downloaded{ui.horizontal(|ui|{
-                        if ui.add_enabled(!self.busy&&!is_active&&!is_pending,egui::Button::new(RichText::new("Quitar").color(d::RED))).clicked(){self.call("workshop_remove",json!({"action":"workshop_remove","key":key}));}
-                        if ui.add_enabled(!self.busy,egui::Button::new(RichText::new(if is_pending{"En cola"}else if is_active{"Activo"}else{"Elegir"}).color(d::GREEN))).clicked()&&!is_active&&!is_pending{self.queue_plan("workshop".into(),json!({"kind":"workshop","category":"Workshop","target":"Labs_Utopia_P.upk","map_key":key,"label":format!("Mapa → {}",s(item,"name"))}));self.save_queue();self.status="Mapa añadido a Aplicar cambios. Sustituye únicamente Utopia Retro.".into();}
+                        if ui.add_enabled(!self.busy&&!is_active&&!is_pending,egui::Button::new(RichText::new("Quitar").color(d::RED()))).clicked(){self.call("workshop_remove",json!({"action":"workshop_remove","key":key}));}
+                        if ui.add_enabled(!self.busy,egui::Button::new(RichText::new(if is_pending{"En cola"}else if is_active{"Activo"}else{"Elegir"}).color(d::GREEN()))).clicked()&&!is_active&&!is_pending{self.queue_plan("workshop".into(),json!({"kind":"workshop","category":"Workshop","target":"Labs_Utopia_P.upk","map_key":key,"label":format!("Mapa → {}",s(item,"name"))}));self.save_queue();self.status="Mapa añadido a Aplicar cambios. Sustituye únicamente Utopia Retro.".into();}
                     });}else if ui.add_enabled(!self.busy,egui::Button::new("↓ Descargar").min_size(Vec2::new(ui.available_width(),30.))).clicked(){self.call("workshop_download",json!({"action":"workshop_download","key":key}));}
                 });
             }});ui.add_space(8.);}

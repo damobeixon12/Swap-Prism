@@ -35,15 +35,15 @@ impl App{
      }else if let Some(release)=self.available_update.clone(){
       ui.label(RichText::new(format!("Versión {} disponible",release.version)).size(19.));
       if let Some(notes)=&release.notes{d::muted(ui,notes);}
-      ui.add_space(10.);if ui.add_enabled(!self.busy&&!self.running,d::button("Actualizar ahora",d::GREEN)).clicked(){
+      ui.add_space(10.);if ui.add_enabled(!self.busy&&!self.running,d::button("Actualizar ahora",d::GREEN())).clicked(){
        self.busy=true;self.update_downloading=true;self.update_bytes=0;self.update_total=None;self.update_error.clear();
        let tx=self.tx.clone();let root=self.root.clone();thread::spawn(move||{let result=update::download_progress(&release,&root,|bytes,total|{let _=tx.send(Event::UpdateBytes(bytes,total));});let _=tx.send(Event::Downloaded(result));});
       }
       if self.running{d::muted(ui,"Cierra Rocket League para instalar la actualización.");}
       d::muted(ui,"Descarga verificada, instalación y reinicio automático.");
-     }else if self.update_file.is_some(){ui.label("Descarga verificada");if ui.add_enabled(!self.busy&&!self.running,d::button("Instalar y reiniciar",d::GREEN)).clicked(){self.start_native_update();}}
+     }else if self.update_file.is_some(){ui.label("Descarga verificada");if ui.add_enabled(!self.busy&&!self.running,d::button("Instalar y reiniciar",d::GREEN())).clicked(){self.start_native_update();}}
      else{ui.label("Ya tienes la última versión publicada.");}
-     if !self.update_error.is_empty(){ui.label(RichText::new(&self.update_error).color(d::RED));}
+     if !self.update_error.is_empty(){ui.label(RichText::new(&self.update_error).color(d::RED()));}
      ui.add_space(12.);if !self.update_downloading&&self.update_waiting.is_none()&&ui.button("Cerrar").clicked(){self.update_open=false;}
      ui.add_space(12.);
     });

@@ -23,9 +23,9 @@ impl App{
             let t=(time.elapsed().as_secs_f32()/0.65).clamp(0.,1.);let eased=1.-(1.-t).powi(3);let end=self.apply_anchor.center();
             let mut pos=origin.lerp(end,eased);pos.y-=((t*std::f32::consts::PI).sin())*35.;
             let alpha=if t>0.8{(1.-t)/0.2}else{1.};let rect=egui::Rect::from_center_size(pos,Vec2::new(175.-t*35.,32.-t*8.));
-            painter.rect_filled(rect,7,design::FIELD.gamma_multiply(alpha));
-            painter.rect_stroke(rect,7,egui::Stroke::new(1_f32,design::GREEN.gamma_multiply(alpha)),egui::StrokeKind::Inside);
-            let text:String=label.chars().take(22).collect();painter.text(pos,egui::Align2::CENTER_CENTER,text,egui::FontId::proportional(11.),design::TEXT.gamma_multiply(alpha));
+            painter.rect_filled(rect,7,design::FIELD().gamma_multiply(alpha));
+            painter.rect_stroke(rect,7,egui::Stroke::new(1_f32,design::GREEN().gamma_multiply(alpha)),egui::StrokeKind::Inside);
+            let text:String=label.chars().take(22).collect();painter.text(pos,egui::Align2::CENTER_CENTER,text,egui::FontId::proportional(11.),design::TEXT().gamma_multiply(alpha));
         }
         if !self.queue_flights.is_empty(){ctx.request_repaint();}
     }

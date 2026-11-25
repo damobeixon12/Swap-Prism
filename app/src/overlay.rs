@@ -31,7 +31,7 @@ pub struct Placement {
 }
 
 pub fn draw_metrics(ui: &mut egui::Ui, fps: Option<u32>, ping: Option<u32>, show_ping: bool) {
-    let green = design::GREEN;
+    let green = design::GREEN();
     ui.label(
         RichText::new(format!(
             "{} FPS",
@@ -121,7 +121,7 @@ pub fn show(
                         ui.label(
                             RichText::new("Arrastra para mover")
                                 .size(10.)
-                                .color(design::MUTED),
+                                .color(design::MUTED()),
                         );
                         let response =
                             ui.interact(ui.max_rect(), ui.id().with("drag"), egui::Sense::drag());
@@ -173,7 +173,7 @@ impl App {
         if self.overlay_tab == 1 {
             ui.heading("Rank in game");
             design::card().show(ui,|ui|{
-                design::eyebrow(ui,"FUENTE DE DATOS PENDIENTE",design::PURPLE);ui.heading("Rango y elo reales");
+                design::eyebrow(ui,"FUENTE DE DATOS PENDIENTE",design::PURPLE());ui.heading("Rango y elo reales");
                 design::muted(ui,"El marcador final del juego puede mostrar MMR, pero todavía no tenemos una lectura automática fiable de ese dato.");
                 design::muted(ui,"Esta función espera una fuente verificable. No se muestran rangos inventados ni estimados a partir de otra modalidad.");
             });
@@ -186,7 +186,7 @@ impl App {
         );
         ui.add_space(16.);
         design::card().show(ui,|ui|{
-            design::eyebrow(ui,"FPS DEL JUEGO",design::GREEN);
+            design::eyebrow(ui,"FPS DEL JUEGO",design::GREEN());
             let before=self.overlay_preferences.fps;ui.checkbox(&mut self.overlay_preferences.fps,"Mostrar FPS");
             if before!=self.overlay_preferences.fps{self.telemetry.enable(self.overlay_preferences.fps);self.save_overlay();}
             let reading=self.telemetry.snapshot();design::muted(ui,if self.overlay_preferences.fps{if reading.live_fps().is_some(){"Midiendo fotogramas del juego".into()}else{reading.status.clone()}}else{"Desactivado".into()});
@@ -195,7 +195,7 @@ impl App {
         });
         ui.add_space(12.);
         design::card().show(ui, |ui| {
-            design::eyebrow(ui, "POSICIÓN", design::CYAN);
+            design::eyebrow(ui, "POSICIÓN", design::CYAN());
             ui.horizontal_wrapped(|ui| {
                 if ui.button("Arriba a la izquierda").clicked() {
                     self.overlay_preferences.anchor = "top-left".into();
@@ -245,7 +245,7 @@ impl App {
         });
         ui.add_space(12.);
         design::card().show(ui,|ui|{
-            design::eyebrow(ui,"PING",design::MUTED);let mut enabled=false;ui.add_enabled(false,egui::Checkbox::new(&mut enabled,"Mostrar ping"));
+            design::eyebrow(ui,"PING",design::MUTED());let mut enabled=false;ui.add_enabled(false,egui::Checkbox::new(&mut enabled,"Mostrar ping"));
             design::muted(ui,"Pendiente de una fuente verificable del ping de esta partida. No se sustituye por un ping a Internet ni por el de una región.");
             draw_ping_preview(ui);
         });
@@ -268,9 +268,9 @@ fn draw_ping_preview(ui: &mut egui::Ui) {
                     Vec2::new(3., h),
                 ),
                 1,
-                design::GREEN,
+                design::GREEN(),
             );
         }
-        ui.label(RichText::new("—").color(design::GREEN));
+        ui.label(RichText::new("—").color(design::GREEN()));
     });
 }

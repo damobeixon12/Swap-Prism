@@ -60,19 +60,19 @@ impl App{
             });
             ui.add_space(16.);
             d::card().inner_margin(26).show(ui,|ui|{
-                d::eyebrow(ui,"SHOWCASE · SOLO LOCAL",d::MUTED);
+                d::eyebrow(ui,"SHOWCASE · SOLO LOCAL",d::MUTED());
                 ui.label(RichText::new(MODES.iter().find(|(id,_)|*id==mode).unwrap().1).size(19.));
-                ui.horizontal(|ui|{let(rect,_)=ui.allocate_exact_size(Vec2::splat(94.),egui::Sense::hover());rank_icon(ui,rect,tier);ui.vertical(|ui|{ui.label(RichText::new(TIERS[tier]).size(29.).strong());ui.label(RichText::new(format!("{mmr} MMR{}",if tier>0&&tier<22{format!(" · División {}",division+1)}else{String::new()})).size(22.).color(d::GREEN));});});
+                ui.horizontal(|ui|{let(rect,_)=ui.allocate_exact_size(Vec2::splat(94.),egui::Sense::hover());rank_icon(ui,rect,tier);ui.vertical(|ui|{ui.label(RichText::new(TIERS[tier]).size(29.).strong());ui.label(RichText::new(format!("{mmr} MMR{}",if tier>0&&tier<22{format!(" · División {}",division+1)}else{String::new()})).size(22.).color(d::GREEN()));});});
             });
             ui.add_space(16.);
             ui.horizontal_wrapped(|ui|{
-                if ui.add_enabled(!self.busy,d::button("Añadir fake rank",d::GREEN)).clicked(){
+                if ui.add_enabled(!self.busy,d::button("Añadir fake rank",d::GREEN())).clicked(){
                     let mut settings=self.profile_pending.clone().unwrap_or_else(||self.profile_state["settings"].clone());if !settings.is_object(){settings=json!({});}
                     settings["rank"]=json!({"enabled":true,"playlist":mode,"mmr":mmr,"tier":tier,"division":division});self.queue_profile(settings);
                 }
-                if ui.add_enabled(!self.busy,d::button("Quitar fake rank",d::RED)).clicked(){let mut settings=self.profile_pending.clone().unwrap_or_else(||self.profile_state["settings"].clone());if settings.is_object(){settings["rank"]=Value::Null;self.queue_profile(settings);}}
+                if ui.add_enabled(!self.busy,d::button("Quitar fake rank",d::RED())).clicked(){let mut settings=self.profile_pending.clone().unwrap_or_else(||self.profile_state["settings"].clone());if settings.is_object(){settings["rank"]=Value::Null;self.queue_profile(settings);}}
             });
-            d::muted(ui,"Se añade a Aplicar cambios. Cierra Rocket League antes de aplicar o restaurar la apariencia.");
+            d::muted(ui,"Se añade a los cambios sin aplicar. Cierra Rocket League antes de aplicar o restaurar la apariencia.");
         });
         self.rank_draft=json!({"enabled":true,"playlist":mode,"mmr":mmr,"tier":tier,"division":division,"auto":auto});
         if self.design_dir.is_none(){let _=fs::write(self.root.join("data/rank-draft.json"),self.rank_draft.to_string());}

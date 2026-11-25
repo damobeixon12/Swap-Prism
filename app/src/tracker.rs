@@ -20,10 +20,10 @@ impl App{
             if ui.button("Recargar").clicked(){if let Some(view)=&self.tracker_web{let _=view.reload();}}
         });
         d::muted(ui,"La web gestiona sus datos y comprobaciones. Swap Prism no usa su API privada ni calcula un MMR real estimado.");
-        if !self.tracker_error.is_empty(){ui.label(RichText::new(&self.tracker_error).color(d::RED));}
+        if !self.tracker_error.is_empty(){ui.label(RichText::new(&self.tracker_error).color(d::RED()));}
         let (rect,_)=ui.allocate_exact_size(Vec2::new(ui.available_width(),ui.available_height().max(160.)),egui::Sense::hover());
         self.tracker_bounds=rect;
-        if self.tracker_requested.is_none(){ui.painter().text(rect.center(),egui::Align2::CENTER_CENTER,"Pulsa Ver mi Tracker para cargar tu perfil aquí.",egui::FontId::proportional(17.),d::MUTED);}
+        if self.tracker_requested.is_none(){ui.painter().text(rect.center(),egui::Align2::CENTER_CENTER,"Pulsa Ver mi Tracker para cargar tu perfil aquí.",egui::FontId::proportional(17.),d::MUTED());}
     }
 
     pub(super) fn sync_tracker(&mut self,ctx:&egui::Context,frame:&eframe::Frame){

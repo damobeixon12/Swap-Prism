@@ -2,7 +2,7 @@ use super::*;
 use crate::design as d;
 
 fn rgb(value:&str)->Color32{
-    u32::from_str_radix(value.trim_start_matches('#'),16).map(|n|Color32::from_rgb((n>>16) as u8,(n>>8) as u8,n as u8)).unwrap_or(d::GREEN)
+    u32::from_str_radix(value.trim_start_matches('#'),16).map(|n|Color32::from_rgb((n>>16) as u8,(n>>8) as u8,n as u8)).unwrap_or(d::GREEN())
 }
 fn hex(c:Color32)->String{format!("#{:02X}{:02X}{:02X}",c.r(),c.g(),c.b())}
 
@@ -19,7 +19,7 @@ impl App {
                     ui.label(RichText::new(s(&current,"text")).size(24.).strong().color(rgb(s(&current,"color"))));
                     d::muted(ui,format!("Reemplaza: {}",s(&current,"target")));
                     if ui.button("Editar este título").clicked(){self.title_draft=current.clone();self.title_page=1;}
-                    if ui.add_enabled(!self.busy,d::button("Revertir título",d::RED)).clicked(){self.title_apply(Value::Null);}
+                    if ui.add_enabled(!self.busy,d::button("Revertir título",d::RED())).clicked(){self.title_apply(Value::Null);}
                 }else{d::muted(ui,"Estás usando tu título original.");}
             });return;
         }
@@ -32,7 +32,7 @@ impl App {
             for row in filtered.chunks(2){ui.columns(2,|columns|{for(i,(label,color,glow))in row.iter().enumerate(){
                 let width=columns[i].available_width();let(r,response)=columns[i].allocate_exact_size(Vec2::new(width,100.),egui::Sense::click());let painter=columns[i].painter();
                 let selected=s(&self.title_draft,"style")==*label;
-                painter.rect_filled(r,5,if selected{d::FIELD}else{d::PANEL});painter.rect_stroke(r,5,egui::Stroke::new(1_f32,if selected{d::MUTED}else{d::FIELD}),egui::StrokeKind::Inside);
+                painter.rect_filled(r,5,if selected{d::FIELD()}else{d::PANEL()});painter.rect_stroke(r,5,egui::Stroke::new(1_f32,if selected{d::MUTED()}else{d::FIELD()}),egui::StrokeKind::Inside);
                 let c=rgb(color);let mut font=egui::FontId::proportional(17.);let g=painter.layout_no_wrap(label.to_string(),font.clone(),c);font.size*=((width-24.)/g.size().x.max(1.)).min(1.);
                 for offset in [Vec2::new(1.,0.),Vec2::new(-1.,0.),Vec2::new(0.,1.),Vec2::new(0.,-1.)]{painter.text(r.center()+offset,egui::Align2::CENTER_CENTER,*label,font.clone(),rgb(glow).gamma_multiply(0.24));}
                 painter.text(r.center(),egui::Align2::CENTER_CENTER,*label,font,c);
@@ -58,7 +58,7 @@ impl App {
         let mut changed=false;
         egui::ScrollArea::vertical().id_salt("title-editor").max_height((ui.available_height()-64.).max(120.)).show(ui,|ui|{
             d::card().inner_margin(24).show(ui,|ui|{
-                d::eyebrow(ui,"VISTA PREVIA ORIENTATIVA",d::PURPLE);
+                d::eyebrow(ui,"VISTA PREVIA ORIENTATIVA",d::PURPLE());
                 let text=s(&self.title_draft,"text").to_uppercase();
                 let color=rgb(s(&self.title_draft,"color"));let color2=rgb(s(&self.title_draft,"color2"));let glow=rgb(s(&self.title_draft,"glow"));
                 let (rect,_)=ui.allocate_exact_size(Vec2::new(ui.available_width(),90.),egui::Sense::hover());
@@ -67,7 +67,7 @@ impl App {
                 let avatar=s(&self.profile_state["settings"],"avatar");
                 if avatar.is_empty(){egui::Image::new(egui::include_image!("../assets/logo.png")).corner_radius(12).paint_at(ui,avatar_rect);}else{egui::Image::from_uri(format!("file://{avatar}")).corner_radius(12).paint_at(ui,avatar_rect);}
                 let alias=s(&self.profile_state["settings"],"name");let player=if alias.is_empty(){s(&self.snapshot,"player_name")}else{alias};
-                ui.painter().text(rect.min+Vec2::new(96.,20.),egui::Align2::LEFT_TOP,player,egui::FontId::proportional(21.),d::TEXT);
+                ui.painter().text(rect.min+Vec2::new(96.,20.),egui::Align2::LEFT_TOP,player,egui::FontId::proportional(21.),d::TEXT());
                 let title=if text.is_empty(){"TU TÍTULO"}else{&text};
                 let mut font=egui::FontId::proportional(18.);
                 let mut galley=ui.painter().layout_no_wrap(title.to_owned(),font.clone(),color);
@@ -111,8 +111,8 @@ impl App {
         ui.add_space(10.);
         ui.horizontal_wrapped(|ui|{
             let valid=!s(&self.title_draft,"text").trim().is_empty()&&!s(&self.title_draft,"target").is_empty();
-            if ui.add_enabled(!self.busy&&self.game.is_some()&&valid,d::button("Añadir título a cambios",d::GREEN)).clicked(){self.title_apply(self.title_draft.clone());}
-            if ui.add_enabled(!self.busy&&self.profile_state["settings"]["title"].is_object(),d::button("Revertir título",d::RED)).clicked(){self.title_apply(Value::Null);}
+            if ui.add_enabled(!self.busy&&self.game.is_some()&&valid,d::button("Añadir título a cambios",d::GREEN())).clicked(){self.title_apply(self.title_draft.clone());}
+            if ui.add_enabled(!self.busy&&self.profile_state["settings"]["title"].is_object(),d::button("Revertir título",d::RED())).clicked(){self.title_apply(Value::Null);}
             if self.running{d::muted(ui,"Cierra Rocket League para aplicar.");}
         });
         if changed{let _=fs::write(self.root.join("data/title-draft.json"),serde_json::to_vec_pretty(&self.title_draft).unwrap());if !s(&self.title_draft,"text").trim().is_empty()&&!s(&self.title_draft,"target").is_empty(){self.title_apply(self.title_draft.clone());}}

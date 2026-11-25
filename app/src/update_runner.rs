@@ -30,9 +30,9 @@ impl eframe::App for Updater{
  fn update(&mut self,ctx:&egui::Context,_:&mut eframe::Frame){
   self.frames+=1;if self.frames==3{let _=fs::write(self.config.root.join("data/updates/runner-ready.json"),format!("{{\"owner_pid\":{}}}",self.config.pid));}
   let status=self.state.lock().unwrap().clone();if ctx.input(|i|i.viewport().close_requested())&&!self.allow_close{ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);}
-  egui::CentralPanel::default().frame(egui::Frame::new().fill(design::BACKGROUND).inner_margin(28)).show(ctx,|ui|{ui.vertical_centered(|ui|{
+  egui::CentralPanel::default().frame(egui::Frame::new().fill(design::BACKGROUND()).inner_margin(28)).show(ctx,|ui|{ui.vertical_centered(|ui|{
    ui.add_space(10.);ui.add(egui::Image::new(egui::include_image!("../assets/logo.png")).fit_to_exact_size(egui::Vec2::splat(90.)));ui.add_space(12.);ui.heading("Swap Prism");ui.add_space(12.);ui.label(&status.label);ui.add_space(12.);ui.add(egui::ProgressBar::new(status.fraction).desired_width(440.).show_percentage());ui.add_space(12.);
-   if status.error.is_empty(){ui.label("Tus selecciones y copias se conservan.");}else{ui.label(egui::RichText::new(&status.error).color(design::RED));if ui.button("Reabrir Swap Prism").clicked(){let _=Command::new(self.config.root.join("Swap Prism.exe")).spawn();self.allow_close=true;ctx.send_viewport_cmd(egui::ViewportCommand::Close);}if ui.button("Cerrar").clicked(){self.allow_close=true;ctx.send_viewport_cmd(egui::ViewportCommand::Close);}}
+   if status.error.is_empty(){ui.label("Tus selecciones y copias se conservan.");}else{ui.label(egui::RichText::new(&status.error).color(design::RED()));if ui.button("Reabrir Swap Prism").clicked(){let _=Command::new(self.config.root.join("Swap Prism.exe")).spawn();self.allow_close=true;ctx.send_viewport_cmd(egui::ViewportCommand::Close);}if ui.button("Cerrar").clicked(){self.allow_close=true;ctx.send_viewport_cmd(egui::ViewportCommand::Close);}}
   });});if status.done{self.allow_close=true;ctx.send_viewport_cmd(egui::ViewportCommand::Close);}ctx.request_repaint_after(Duration::from_millis(100));
  }
 }
