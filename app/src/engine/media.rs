@@ -7,7 +7,6 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 
 const ALPHA: &str = "https://alphaconsole.io/browse";
-const VGM: &str = "https://videogamemods.com/vgm/rocketleague/mods?page=3";
 const SOUNDS: &str = "https://www.myinstants.com/es/search/";
 const VGM_SLUGS: [&str; 5] = ["sakura-boost-meter-1020466", "car-meter-1022094", "pro-team-boost-gauge-1021662", "tribal-fire-boost-meter", "ice-dark-boost-meter"];
 const HOSTS: [&str; 7] = ["alphaconsole.io", "s3.alphaconsole.io", "videogamemods.com", "www.videogamemods.com", "uploads.videogamemods.com", "myinstants.com", "www.myinstants.com"];

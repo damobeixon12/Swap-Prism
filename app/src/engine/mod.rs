@@ -1,6 +1,7 @@
 //! Native engine, replacing engine/*.py one module at a time. Actions ported here run in-process; every other action
 //! still goes to the Python engine (_engine/SWAPPRISMEngine.exe) through the same JSON protocol.
 pub mod aes;
+pub mod apply;
 pub mod body;
 pub mod colors;
 pub mod display;
@@ -38,6 +39,7 @@ pub fn handle(root: &Path, request: &Value, progress: &dyn Fn(Value)) -> Option<
         "workshop_import" => workshop::import_map(root, Path::new(request["path"].as_str().unwrap_or("")), None),
         "workshop_remove" => workshop::remove(root, request["key"].as_str().unwrap_or("")),
         "bootstrap" => bootstrap(root),
+        "apply" => apply::apply(root, request, progress),
         "refresh_state" => state::inspect_state(&root.join("data")).map(|s| serde_json::json!({"state": s})),
         "open_epic" => util::shell_open("com.epicgames.launcher://store/library").map(|_| serde_json::json!({"opened": true})),
         "verify_files" => verify_files(root, request),
