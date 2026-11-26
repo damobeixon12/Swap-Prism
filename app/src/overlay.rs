@@ -72,7 +72,7 @@ fn watch_scoreboard(ctx: &egui::Context) {
         std::thread::spawn(move || loop {
             let held = platform::scoreboard_held();
             platform::scoreboard_pressed();
-            if held != platform::scoreboard_held() { ctx.request_repaint(); }
+            if held != platform::scoreboard_held() { ctx.request_repaint_of(egui::ViewportId::from_hash_of("swapprism-scoreboard")); }
             std::thread::sleep(Duration::from_millis(30));
         });
     });
@@ -167,7 +167,8 @@ pub fn scoreboard_rows(rows: &[LobbyRow]) -> Vec<(&LobbyRow, f32)> {
 }
 
 /// While the scoreboard button is held in a ranked match: rank icon left of each player's photo, MMR after the name.
-/// The window lives for the whole match and is only shown/hidden: creating it on each press flashed white (and black when closed).
+/// The window lives for the whole match and stays visible (transparent): creating it on each press flashed white, and
+/// hiding/showing it behind egui's back stopped its repaints, so a later press showed an unpainted (black) surface.
 fn show_scoreboard(ctx: &egui::Context, board: Arc<Mutex<RankBoard>>) {
     let active = !board.lock().unwrap().lobby.is_empty() && platform::foreground_game();
     // Diagnostic (black screen on the scoreboard): window state at every change of what is wanted.
@@ -195,14 +196,13 @@ fn show_scoreboard(ctx: &egui::Context, board: Arc<Mutex<RankBoard>>) {
         .with_mouse_passthrough(true)
         .with_window_level(egui::WindowLevel::AlwaysOnTop)
         .with_visible(false);
-    // A hidden window is not repainted, so the colour key and show/hide are driven from here (the watcher repaints on Tab).
     platform::transparent_overlay(BOARD_TITLE, false);
-    platform::overlay_visibility(BOARD_TITLE, platform::scoreboard_held());
     ctx.show_viewport_deferred(egui::ViewportId::from_hash_of("swapprism-scoreboard"), builder, move |ctx, _| {
         ctx.request_repaint_after(Duration::from_millis(100));
         platform::transparent_overlay(BOARD_TITLE, false);
-        let show = !board.lock().unwrap().lobby.is_empty() && platform::scoreboard_held() && platform::foreground_game();
-        platform::overlay_visibility(BOARD_TITLE, show);
+        // Shown once the colour key is set; only the rows depend on the button.
+        platform::overlay_visibility(BOARD_TITLE, true);
+        let show = platform::scoreboard_held();
         static SHOWN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
         if SHOWN.swap(show, std::sync::atomic::Ordering::Relaxed) != show { platform::log_overlay(BOARD_TITLE, &format!("dibujado mostrar={show}")); }
         egui::CentralPanel::default().frame(egui::Frame::new().fill(Color32::TRANSPARENT)).show(ctx, |ui| {
@@ -210,6 +210,7 @@ fn show_scoreboard(ctx: &egui::Context, board: Arc<Mutex<RankBoard>>) {
             let s = area.height() / 1080.;
             let centre = area.center();
             let board = board.lock().unwrap();
+            if !show { return; }
             for (row, y) in scoreboard_rows(&board.lobby) {
                 let y = centre.y + y * s;
                 // Rank icon just left of the photo; MMR centred in the gap between the name and the PUNTAJE column.
