@@ -692,7 +692,7 @@ fn season_logo(pkg: &Package, season: &Value) -> R<Vec<u8>> {
 }
 
 /// MP3 → 16-bit mono 48 kHz PCM through Windows Media Foundation (the Python engine used miniaudio).
-fn decode_mp3(path: &Path) -> R<Vec<u8>> {
+pub fn decode_mp3(path: &Path) -> R<Vec<u8>> {
     use windows::core::HSTRING;
     use windows::Win32::Media::MediaFoundation::*;
     use windows::Win32::System::Com::{CoInitializeEx, COINIT_MULTITHREADED};

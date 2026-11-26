@@ -12,6 +12,7 @@ pub mod inventory;
 pub mod jobs;
 pub mod launcher;
 pub mod library;
+pub mod media;
 pub mod profile;
 pub mod save;
 pub mod state;
@@ -44,6 +45,14 @@ pub fn handle(root: &Path, request: &Value, progress: &dyn Fn(Value)) -> Option<
         "profile_import" => {
             let kind = request["kind"].as_str().unwrap_or("");
             profile::import_image(root, Path::new(request["path"].as_str().unwrap_or("")), kind).map(|path| serde_json::json!({"path": path, "kind": kind}))
+        }
+        "media_catalog" => media::catalog(root, request["source"].as_str().unwrap_or(""), request["query"].as_str().unwrap_or(""), request["refresh"].as_bool().unwrap_or(false), request["url"].as_str().unwrap_or(""))
+            .map(|m| serde_json::json!({"media": m, "sounds": media::audio_library(root)})),
+        "media_preview" => media::preview_sound(root, request["key"].as_str().unwrap_or(""), request["kind"].as_str().unwrap_or("post")),
+        "media_download" => {
+            let source = request["source"].as_str().unwrap_or("");
+            media::download(root, source, request["key"].as_str().unwrap_or(""), request["kind"].as_str().unwrap_or("post"), request["preview"].as_bool().unwrap_or(false))
+                .and_then(|mut r| { if source != "sounds" { r["packs"] = library::packs(root)?.into(); } Ok(r) })
         }
         "studio_apply" => game(request).and_then(|g| studio::apply(root, &g, &request["settings"], progress)),
         "sound_import" => studio::import_mp3(root, Path::new(request["path"].as_str().unwrap_or("")), request["kind"].as_str().unwrap_or("")),
@@ -101,10 +110,7 @@ fn bootstrap(root: &Path) -> Result<Value, String> {
         }
         Err(e) => { errors.push(e); serde_json::json!({"inventory": [], "active": null}) }
     };
-    let sounds: Vec<Value> = std::fs::read_dir(root.join("data").join("sounds")).into_iter().flatten().flatten().map(|e| e.path())
-        .filter(|p| p.extension().is_some_and(|x| x == "json"))
-        .filter_map(|p| serde_json::from_slice::<Value>(&std::fs::read(p).ok()?).ok())
-        .filter(|item| (item["kind"] == "post" || item["kind"] == "reset") && item["path"].as_str().is_some_and(|p| Path::new(p).is_file())).collect();
+    let sounds = media::audio_library(root);
     Ok(serde_json::json!({"snapshot": snapshot, "packs": library::packs(root)?, "sounds": sounds, "state": state::inspect_state(&root.join("data"))?,
         "colors": colors::PAINTS.iter().map(|p| p.0).collect::<Vec<_>>(), "errors": errors, "profile": profile::load(root)?, "profile_codec": profile::CODEC_REVISION,
         "studio": studio::load(root)?, "audio_limits": studio::manifest()}))
