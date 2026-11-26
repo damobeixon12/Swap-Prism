@@ -74,6 +74,19 @@ fn replace_instructions(code: &[u8], pick: impl Fn(&[u8], &(usize, usize, u8, Ve
 /// Diagnostic logging of what each avatar receives (Launch.log, category SwapPrism). Off for releases.
 const AVATAR_LOG: bool = false;
 
+/// PlayerID of a player the game has not resolved yet (LocalPlayer reports the same value meanwhile).
+const UNKNOWN_ID: &str = "Unknown|0|0";
+
+/// Raises a method's local register count by `extra`.
+fn locals_edit(abc: &Abc, mid: u32, extra: u32) -> R<(usize, usize, Vec<u8>)> {
+    let b = abc.body(mid).ok_or("Método sin cuerpo.")?;
+    let mut r = Reader { data: &abc.data, pos: b.stackpos };
+    r.u30()?;
+    let at = r.pos;
+    r.u30()?;
+    Ok((at, r.pos, encode_u30(b.locals + extra)))
+}
+
 /// Raises a method's max_stack by `extra`.
 fn stack_edit(abc: &Abc, mid: u32, extra: u32) -> R<(usize, usize, Vec<u8>)> {
     let b = abc.body(mid).ok_or("Método sin cuerpo.")?;
@@ -665,6 +678,7 @@ fn patch_avatar(data: &[u8]) -> R<(Vec<u8>, Vec<String>)> {
     // The class can be shared with movies without the photo frame (the goal replay loads the shell's PlayerAvatar):
     // there the icon must stay native, or it shows as an empty black avatar. The frame is the sprite's last one.
     let mut untint = untint;
+    let mut saved_frame = false;
     if let (Ok(total), Ok(label), Ok(goto)) = (abc.reference("totalFrames"), abc.reference("currentLabel"), abc.reference("gotoAndStop")) {
         let has_frame = |code: &[u8]| -> Vec<u8> {
             let mut c = tinted.clone(); c.extend(op(0x66, label)); c.extend(op(0x2c, abc.strings.len() as u32));
@@ -672,8 +686,18 @@ fn patch_avatar(data: &[u8]) -> R<(Vec<u8>, Vec<String>)> {
             c.extend(code);
             c
         };
-        let mut seek = tinted.clone(); seek.extend(&tinted); seek.extend(op(0x66, total)); seek.extend(op(0x4f, goto)); seek.push(0x01);
-        render = [seek, has_frame(&render)].concat();
+        // The frame is looked up by going to the sprite's last frame; without it, go back to the frame it showed
+        // (otherwise an icon the game does not reselect, e.g. a player who left, stays on an empty frame).
+        // (only where the movie references currentFrame; elsewhere the Unknown-id check keeps other players out).
+        let (mut seek, mut back) = (Vec::new(), Vec::new());
+        if let Ok(current) = abc.reference("currentFrame") {
+            let register = body.locals;
+            seek = tinted.clone(); seek.extend(op(0x66, current)); seek.extend(op(0x63, register));
+            back = tinted.clone(); back.extend(op(0x62, register)); back.extend(op(0x4f, goto)); back.push(0x01);
+            saved_frame = true;
+        }
+        seek.extend(&tinted); seek.extend(&tinted); seek.extend(op(0x66, total)); seek.extend(op(0x4f, goto)); seek.push(0x01);
+        render = [seek, has_frame(&render), back].concat();
         untint = has_frame(&untint);
     }
     let mut row = vec![0xd0]; row.extend(prop("tagame.controls:PlayerAvatar.m_playerInfoRow")?);
@@ -688,7 +712,11 @@ fn patch_avatar(data: &[u8]) -> R<(Vec<u8>, Vec<String>)> {
         compare.extend(jump(0x14, code.len() + skip.len() + fallback.len()));
         compare.extend(code);
         compare.extend(&skip);
-        Ok([guard(&ident, &compare), fallback].concat())
+        // An id the game has not resolved yet ("Unknown|0|0") is also what LocalPlayer gives then: never the local player.
+        let mut unknown = ident.clone();
+        unknown.extend(op(0x2c, abc.strings.len() as u32 + 1));
+        unknown.extend(jump(0x13, compare.len() + fallback.len())); // ifeq
+        Ok([guard(&ident, &[unknown, compare].concat()), fallback].concat())
     };
     // Diagnostic build: DevUtil.Log("SwapPrism", ...) writes what each avatar receives to the game's Launch.log.
     let mut extra_strings: Vec<&str> = Vec::new();
@@ -699,7 +727,7 @@ fn patch_avatar(data: &[u8]) -> R<(Vec<u8>, Vec<String>)> {
         abc.class("tagame.api.DevUtil")?;
         let (dev, logm) = (r("tagame.api.DevUtil")?, r("Log")?);
         let texts: [&'static str; 10] = ["SwapPrism", "", " id=", " local=", " label=", " frames=", " platform=", " psyonix=", " tinted=", " loader="];
-        let base = abc.strings.len() as u32 + 1;
+        let base = abc.strings.len() as u32 + 2;
         let mut index = |k: usize| -> u32 { base + extra_strings.iter().position(|t| *t == texts[k]).unwrap_or_else(|| { extra_strings.push(texts[k]); extra_strings.len() - 1 }) as u32 };
         let mut c = op(0x60, dev);
         c.extend(op(0x2c, index(0)));
@@ -731,9 +759,12 @@ fn patch_avatar(data: &[u8]) -> R<(Vec<u8>, Vec<String>)> {
     let validate_log = log("validate", &mut extra_strings).unwrap_or_default();
     let code = [&body.code[..scope], &validate_log[..], &local_only(&render)?[..], &body.code[scope..]].concat();
     let mut edits = vec![body_edit(&abc, mid, &code)?];
+    if saved_frame { edits.push(locals_edit(&abc, mid, 1)?); }
     if !validate_log.is_empty() { edits.push(stack_edit(&abc, mid, 6)?); }
     let mut pooled = encode_u30(FRAME.len() as u32);
     pooled.extend(FRAME.as_bytes());
+    pooled.extend(encode_u30(UNKNOWN_ID.len() as u32));
+    pooled.extend(UNKNOWN_ID.as_bytes());
     let mut changed: HashMap<u32, Vec<u8>> = HashMap::from([(mid, code)]);
     let tint: Vec<u32> = cls.traits.iter().filter(|t| t.kind == 1 && t.name.ends_with(".updateTeamColor")).filter_map(|t| t.method).collect();
     if let [t] = tint[..] {
@@ -774,7 +805,7 @@ fn patch_avatar(data: &[u8]) -> R<(Vec<u8>, Vec<String>)> {
     }
     for text in &extra_strings { pooled.extend(encode_u30(text.len() as u32)); pooled.extend(text.as_bytes()); }
     edits.push((abc.string_pool_end, abc.string_pool_end, pooled));
-    edits.push(count_edit(&abc, 1 + extra_strings.len())?);
+    edits.push(count_edit(&abc, 2 + extra_strings.len())?);
     let result = splice(&abc, &mut edits);
     let after = Abc::parse(&result)?;
     if after.classes != abc.classes || after.methods != abc.methods { return Err("Cambió una definición del avatar.".into()); }
@@ -961,7 +992,7 @@ mod parity {
     fn real_avatar_patch_is_valid() {
         let folder = std::path::PathBuf::from(std::env::var("SP_BACKUPS").unwrap());
         let picture = std::fs::read(std::env::var("SP_PICTURE").unwrap()).unwrap();
-        let (mut checked, mut waiting, mut rewritten, mut logged) = (0, 0, 0, 0);
+        let (mut checked, mut waiting, mut rewritten, mut logged, mut registers) = (0, 0, 0, 0, 0);
         let mut original_bodies: HashMap<(String, usize, u32), Vec<u8>> = HashMap::new();
         for entry in std::fs::read_dir(&folder).unwrap().flatten() {
             let file = entry.file_name().to_string_lossy().to_string();
@@ -998,6 +1029,18 @@ mod parity {
                     }
                 }
                 if abc.strings.iter().any(|x| x == " loader=") { logged += 1; }
+                // The frame lookup stores the previous frame in a new local register: it must be counted.
+                if let Some(c) = abc.class("tagame.controls.PlayerAvatar") {
+                    if let Some(m) = c.traits.iter().find(|t| t.name.ends_with(".validateAvatarIcon")).and_then(|t| t.method) {
+                        let b = abc.body(m).unwrap();
+                        let original = original_bodies.get(&(file.clone(), x, m)).map(|o| o.len()).unwrap_or(0);
+                        if b.code.len() != original && b.code.windows(1).any(|w| w[0] == 0x63) {
+                            let used = crate::engine::hud::instructions(&b.code).unwrap().iter().filter(|i| i.2 == 0x63 || i.2 == 0x62).map(|i| i.3[0]).max().unwrap_or(0);
+                            assert!(used < b.locals, "{file}: registro {used} fuera de {} locales", b.locals);
+                            registers += 1;
+                        }
+                    }
+                }
                 if let Some(c) = abc.class("tagame.hud.WaitingForPlayerRenderer") {
                     let m = c.traits.iter().find(|t| t.name.ends_with(".setConnectionStatus")).and_then(|t| t.method).unwrap();
                     if abc.body(m).unwrap().code.iter().filter(|b| **b == 0x2a).count() >= 4 { waiting += 1; }
@@ -1006,7 +1049,7 @@ mod parity {
             }
         }
         // Diagnostic build: count movies whose PlayerAvatar logs to the game.
-        println!("REGISTRO en {} peliculas", logged);
+        println!("REGISTRO en {} peliculas; registro de fotograma comprobado en {registers}", logged);
         println!("RESUMEN {checked} peliculas, {rewritten} metodos reescritos con saltos validos, lista de espera en {waiting}");
         assert!(checked > 50 && waiting >= 1);
     }
