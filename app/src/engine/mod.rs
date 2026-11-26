@@ -1,6 +1,7 @@
 //! Native engine, replacing engine/*.py one module at a time. Actions ported here run in-process; every other action
 //! still goes to the Python engine (_engine/SWAPPRISMEngine.exe) through the same JSON protocol.
 pub mod aes;
+pub mod body;
 pub mod colors;
 pub mod dxt;
 pub mod epic;

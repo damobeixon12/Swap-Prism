@@ -132,6 +132,7 @@ fn parse_summary(r: &mut Reader) -> R<Summary> {
 pub struct Offsets {
     pub total_header_size: usize,
     pub name_count: usize,
+    pub import_count: usize,
     pub import_offset: usize,
     pub export_offset: usize,
     pub depends_offset: usize,
@@ -151,7 +152,7 @@ pub fn summary_offsets(data: &[u8]) -> R<Offsets> {
     let name_count = r.pos; r.i32()?;
     r.i32()?; r.i32()?; // name offset, export count
     let export_offset = r.pos; r.i32()?;
-    r.i32()?; // import count
+    let import_count = r.pos; r.i32()?;
     let import_offset = r.pos; r.i32()?;
     let depends_offset = r.pos; r.i32()?;
     let import_export_guids_offset = r.pos; r.i32()?;
@@ -159,7 +160,7 @@ pub fn summary_offsets(data: &[u8]) -> R<Offsets> {
     let thumbnail_table_offset = r.pos; r.i32()?;
     r.take(16)?;
     let generation_count = r.i32()?;
-    Ok(Offsets { total_header_size, name_count, import_offset, export_offset, depends_offset, import_export_guids_offset, thumbnail_table_offset, generation_entries: r.pos, generation_count })
+    Ok(Offsets { total_header_size, name_count, import_count, import_offset, export_offset, depends_offset, import_export_guids_offset, thumbnail_table_offset, generation_entries: r.pos, generation_count })
 }
 
 /// The last generation records the export and name counts.
