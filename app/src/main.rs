@@ -77,6 +77,7 @@ enum Event {
     Presence(bool),
     Toggle,
     Located(Option<(PathBuf, String)>),
+    Catalog(Result<Value, String>),
 }
 struct App {
     rank_draft:Value,
@@ -97,6 +98,9 @@ struct App {
     root: PathBuf,
     config: Value,
     rows: Vec<Value>,
+    /// Last catalog_check: installed version, game object count and the objects added without an official name.
+    catalog_info: Value,
+    catalog_checking: bool,
     snapshot: Value,
     packs: Vec<Value>,
     state: Value,
@@ -230,6 +234,8 @@ impl App {
             root: root.clone(),
             config,
             rows,
+            catalog_info: Value::Null,
+            catalog_checking: false,
             snapshot: json!({}),
             packs: vec![],
             state: read_json(&root.join("data/swaps.json")),
@@ -391,6 +397,16 @@ impl App {
         thread::spawn(move || {
             let result=std::panic::catch_unwind(std::panic::AssertUnwindSafe(||worker_progress(&root,&request,|p|{let _=tx.send(Event::Progress(p));}))).unwrap_or_else(|_|Err("El motor se interrumpió; revisa el estado de los cambios.".into()));
             let _ = tx.send(Event::Engine(action, result));
+        });
+    }
+    /// Compares the installed game with the catalogue in the background (no busy lock; read only).
+    fn check_catalog(&mut self, force: bool) {
+        let Some(game) = self.game.clone() else { return };
+        if self.catalog_checking { return; }
+        self.catalog_checking = true;
+        let (root, tx, version) = (self.root.clone(), self.tx.clone(), self.game_version.clone());
+        thread::spawn(move || {
+            let _ = tx.send(Event::Catalog(worker(&root, &json!({"action": "catalog_check", "game": game, "version": version, "force": force}))));
         });
     }
     fn queue_plan(&mut self,key:String,plan:Value){
@@ -584,10 +600,23 @@ impl App {
                         }
                     }
                 }
+                Event::Catalog(result) => {
+                    self.catalog_checking = false;
+                    match result {
+                        Ok(v) => {
+                            // Bundled rows first, then the game's objects without an official name.
+                            self.rows.retain(|r| r["Unofficial"] != true);
+                            self.rows.extend(v["extra"].as_array().cloned().unwrap_or_default());
+                            self.catalog_info = v;
+                        }
+                        Err(e) => self.catalog_info = json!({"error": e}),
+                    }
+                }
                 Event::Located(found) => {
                     if let Some((path, version)) = found {
                         self.game = Some(path);
                         self.game_version = version;
+                        self.check_catalog(false);
                     } else {
                         self.status =
                             "No se encontró Rocket League. Selecciona su carpeta en Ajustes."

@@ -2,6 +2,7 @@
 pub mod aes;
 pub mod apply;
 pub mod body;
+pub mod catalog;
 pub mod colors;
 pub mod display;
 pub mod dxt;
@@ -27,7 +28,9 @@ use serde_json::Value;
 use std::path::Path;
 
 pub fn handle(root: &Path, request: &Value, progress: &dyn Fn(Value)) -> Result<Value, String> {
+    catalog::load_saved(root);
     match request["action"].as_str().unwrap_or("") {
+        "catalog_check" => catalog::check(root, &game(request)?, request["version"].as_str().unwrap_or(""), request["force"] == true),
         "game_settings" => game_settings::read(None),
         "game_settings_write" => game_settings::write(root, &request["changes"], None),
         action if action.starts_with("launcher_") => launcher::handle(root, action, request),
@@ -97,7 +100,7 @@ fn restore(root: &Path, request: &Value) -> Result<Value, String> {
 /// Everything the interface needs at start: saved inventory, packs, sounds, change state, profile and studio.
 fn bootstrap(root: &Path) -> Result<Value, String> {
     let mut errors = Vec::new();
-    let snapshot = match inventory::load_snapshot(jobs::database()) {
+    let snapshot = match inventory::load_snapshot(&jobs::database()) {
         Ok(mut snap) => {
             let source = std::path::PathBuf::from(snap["source"].as_str().unwrap_or(""));
             snap["player_name"] = inventory::player_name(&source).into();

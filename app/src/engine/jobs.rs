@@ -13,9 +13,25 @@ pub const SLOTS: [&str; 10] = ["Body", "Decal", "Wheels", "Rocket Boost", "Trail
 const STANDARD_CARS: [&str; 17] = ["Octane", "Fennec", "Dominus", "Breakout", "Merc", "Backfire", "Gizmo", "Hotshot", "Paladin", "Road Hog", "Venom", "X-Devil", "Takumi", "Scarab", "Zippy", "Ripper", "Grog"];
 
 /// Every catalogued item (items.json merged with the enrichment data), shared with the interface.
-pub fn database() -> &'static Vec<Value> {
+/// The bundled catalogue (RL-Swapper items with verified names and IDs).
+pub fn base_database() -> &'static Vec<Value> {
     static ROWS: std::sync::OnceLock<Vec<Value>> = std::sync::OnceLock::new();
     ROWS.get_or_init(|| serde_json::from_slice(include_bytes!("../../assets/catalog.json")).unwrap_or_default())
+}
+
+static FULL: std::sync::RwLock<Option<std::sync::Arc<Vec<Value>>>> = std::sync::RwLock::new(None);
+
+/// The bundled catalogue plus the game's objects without an official name (catalog::check).
+pub fn database() -> std::sync::Arc<Vec<Value>> {
+    if let Some(rows) = FULL.read().unwrap().as_ref() { return rows.clone(); }
+    let rows = std::sync::Arc::new(base_database().clone());
+    FULL.write().unwrap().get_or_insert(rows).clone()
+}
+
+pub fn set_extra(extra: Vec<Value>) {
+    let mut rows = base_database().clone();
+    rows.extend(extra);
+    *FULL.write().unwrap() = Some(std::sync::Arc::new(rows));
 }
 
 fn text<'a>(v: &'a Value, key: &str) -> &'a str { v[key].as_str().unwrap_or("") }
@@ -31,7 +47,7 @@ pub fn safe_package(name: &str) -> R<&str> {
 pub fn catalog(game: &Path) -> R<Vec<Value>> {
     let cooked = game.join("TAGame").join("CookedPCConsole");
     let mut rows = Vec::new();
-    for row in database() {
+    for row in database().iter() {
         if !SLOTS.contains(&text(row, "Slot")) || text(row, "AssetPath").is_empty() { continue; }
         if cooked.join(safe_package(text(row, "AssetPackage"))?).is_file() { rows.push(row.clone()); }
     }
@@ -48,6 +64,12 @@ pub fn compatibility(item: &Value, car: &str) -> (bool, String) {
     let restricted = item["Attributes"].as_array().into_iter().flatten().any(|a| ["IsLicensed", "PreviewOnly", "InclusivePlatforms"].contains(&text(a, "Key")));
     if restricted { return (false, "Objeto con restricciones de licencia, plataforma o vista previa.".into()); }
     let product = text(item, "Product");
+    if slot == "Decal" && item["Unofficial"] == true {
+        let body = text(item, "Body");
+        if body.is_empty() { return (false, "Decal sin nombre oficial y sin coche identificado.".into()); }
+        if body.to_lowercase() != car.to_lowercase() { return (false, format!("Decal específico de {body}.")); }
+        return (true, format!("Decal de {body} sin nombre oficial; confirma que lo permite tu garaje."));
+    }
     if slot == "Decal" {
         if let Some((required, _)) = product.split_once(':') {
             let required = required.trim();
@@ -300,3 +322,4 @@ pub fn prepare_workshop(root: &Path, game: &Path, selection: &Value) -> R<PathBu
     super::workshop::write(&job.join("informe.json"), &report)?;
     Ok(job)
 }
+

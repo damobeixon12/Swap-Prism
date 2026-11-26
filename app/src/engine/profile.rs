@@ -133,7 +133,7 @@ fn unaffected(cooked: &Path, settings: &Value, profile: &Value) -> R<Option<Vec<
 
 /// Package of the banner equipped on the account, from the local save.
 fn equipped_banner() -> R<Option<String>> {
-    let snap = super::inventory::load_snapshot(super::jobs::database())?;
+    let snap = super::inventory::load_snapshot(&super::jobs::database())?;
     Ok(snap["account_equipped"].as_array().into_iter().flatten().find(|r| r["Slot"] == "Player Banner" && r["AssetPackage"].as_str().is_some_and(|p| !p.is_empty())).and_then(|r| r["AssetPackage"].as_str().map(str::to_owned)))
 }
 
@@ -257,7 +257,7 @@ pub fn prepare(root: &Path, game: &Path, settings: &Value, progress: &dyn Fn(Val
     if settings.get("rank").is_none() { settings["rank"] = profile["settings"].get("rank").cloned().unwrap_or(Value::Null); }
     let settings = normalize(root, &settings)?;
     if truthy(&settings["title"]) {
-        let snap = super::inventory::load_snapshot(super::jobs::database())?;
+        let snap = super::inventory::load_snapshot(&super::jobs::database())?;
         let mut owned: Vec<Value> = snap["inventory"].as_array().into_iter().flatten().filter(|r| r["blueprint"] != true).map(|r| r.get("title_id").cloned().unwrap_or(Value::Null)).collect();
         owned.extend(snap["account_equipped"].as_array().into_iter().flatten().filter(|r| r["Slot"] == "Player Title").map(|r| r["Product"].clone()));
         if !owned.contains(&settings["title"]["target"]) { return Err("El título original no aparece en tu inventario guardado.".into()); }

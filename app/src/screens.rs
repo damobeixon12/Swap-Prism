@@ -683,6 +683,33 @@ impl App {
         });
     }
 
+    /// Which game version the objects come from, checked every time the app opens.
+    fn catalog_card(&mut self, ui: &mut egui::Ui) {
+        d::card().show(ui,|ui|{
+            d::eyebrow(ui,"OBJETOS",d::CYAN());ui.heading("Objetos y versión");ui.add_space(10.);
+            let info=self.catalog_info.clone();
+            if self.catalog_checking{d::muted(ui,"Comprobando los objetos del juego…");}
+            else if let Some(e)=info["error"].as_str(){ui.label(RichText::new(format!("No se pudo comprobar: {e}")).color(d::RED()));}
+            else if info.is_null(){d::muted(ui,if self.game.is_none(){"Elige la carpeta del juego para comprobar sus objetos."}else{"Pendiente de comprobar."});}
+            else{
+                // "++Prime+Update60.1-CL-533021" -> "Update 60.1 (CL 533021)"
+                let pretty=|v:&str|match v.rsplit_once("Update").map(|(_,r)|r).and_then(|r|r.split_once("-CL-")){Some((n,cl))=>format!("Update {n} (CL {cl})"),None=>v.to_owned()};
+                let installed=pretty(info["installed_version"].as_str().unwrap_or(""));
+                let checked=pretty(info["game_version"].as_str().unwrap_or(""));
+                let (installed,checked)=(installed.as_str(),checked.as_str());
+                let extra=info["extra"].as_array().map_or(0,|a|a.len());
+                let total=info["game_items"].as_u64().unwrap_or(0);
+                ui.label(RichText::new(format!("Rocket League instalado: {}",if installed.is_empty(){"versión desconocida"}else{installed})).size(15.));
+                ui.label(RichText::new(format!("Objetos de la versión: {}",if checked.is_empty(){"desconocida"}else{checked})).size(15.));
+                ui.label(RichText::new(format!("{total} objetos en el juego · {total} en Swap Prism ({extra} sin nombre oficial)")).size(15.).color(if checked==installed{d::GREEN()}else{d::RED()}));
+                let at=s(&info,"checked_at");let at=if at.len()==15{format!("el {}/{}/{} a las {}:{}",&at[6..8],&at[4..6],&at[..4],&at[9..11],&at[11..13])}else{at.to_owned()};
+                d::muted(ui,format!("Comprobado {at}. Los objetos sin nombre oficial salen con su nombre interno del juego: Rocket League no guarda su nombre ni su ID en los archivos."));
+            }
+            ui.add_space(6.);
+            if ui.add_enabled(!self.catalog_checking&&self.game.is_some(),egui::Button::new("Comprobar ahora")).clicked(){self.check_catalog(true);}
+        });
+    }
+
     fn settings(&mut self, ui: &mut egui::Ui) {
         if self.view == "Inventory" {
             ui.horizontal(|ui| {
@@ -713,6 +740,7 @@ impl App {
                 if let Some(path)=&self.game{d::muted(ui,path.display().to_string());}else{d::muted(ui,"No se ha encontrado el juego. Selecciona la carpeta rocketleague, que contiene Binaries y TAGame.");}
                 if ui.button("Elegir carpeta del juego").clicked(){if let Some(path)=rfd::FileDialog::new().set_title("Elige rocketleague (contiene Binaries y TAGame)").pick_folder(){if platform::valid_game(&path){self.game=Some(path.clone());self.config["game_path"]=json!(path);self.status=platform::save_config(&self.root,&self.config).err().unwrap_or("Ruta guardada.".into());}else{self.status="Elige la carpeta rocketleague que contiene Binaries y TAGame.".into();}}}
             });ui.add_space(12.);
+            self.catalog_card(ui);ui.add_space(12.);
             if self.launcher_state.is_null()&&!self.launcher_loading&&!self.busy{self.launcher_loading=true;self.call("launcher_status",json!({"action":"launcher_status","game":self.game}));}
             d::card().show(ui,|ui|{
                 d::eyebrow(ui,"JUGAR",d::GREEN());ui.heading("Abrir Rocket League con");ui.add_space(10.);

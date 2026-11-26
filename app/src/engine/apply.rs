@@ -149,7 +149,7 @@ pub fn apply(root: &Path, request: &Value, progress: &dyn Fn(Value)) -> R<Value>
         return Err("Selecciona la carpeta rocketleague que contiene Binaries y TAGame.".into());
     }
     let database = super::jobs::database();
-    let snapshot = super::inventory::load_snapshot(database)?;
+    let snapshot = super::inventory::load_snapshot(&database)?;
     let owned: Vec<Value> = snapshot["inventory"].as_array().into_iter().flatten().filter(|r| r["blueprint"] != true).map(|r| r["ID"].clone()).collect();
     let active = if snapshot["active"].is_object() { snapshot["active"].clone() } else { json!({}) };
     let team = request["team"].as_str().unwrap_or("Blue");
