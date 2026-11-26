@@ -66,7 +66,7 @@ fn worker(root: &Path, request: &Value) -> Result<Value, String> {
     worker_progress(root,request,|_|{})
 }
 fn worker_progress(root: &Path, request: &Value, progress:impl Fn(Value)) -> Result<Value,String> {
-    if let Some(result)=engine::handle(root,request){return result;}
+    if let Some(result)=engine::handle(root,request,&progress){return result;}
     let mut child = Command::new(root.join("_engine/SWAPPRISMEngine.exe"))
         .env("SWAPPRISM_ROOT", root)
         .env("PYTHONIOENCODING", "utf-8")
@@ -725,7 +725,7 @@ fn main() {
         .to_path_buf();
     let args: Vec<_> = std::env::args().collect();
     if args.get(1).map(String::as_str)==Some("--engine-run"){
-        if let Some(input)=args.get(2){let request=read_json(Path::new(input));let value=match engine::handle(&root,&request){Some(Ok(v))=>json!({"ok":true,"result":v}),Some(Err(e))=>json!({"ok":false,"error":e}),None=>json!({"ok":false,"error":"not ported"})};println!("{value}");}
+        if let Some(input)=args.get(2){let request=read_json(Path::new(input));let root=std::env::var_os("SWAPPRISM_ROOT").map(PathBuf::from).unwrap_or(root.clone());let value=match engine::handle(&root,&request,&|_|{}){Some(Ok(v))=>json!({"ok":true,"result":v}),Some(Err(e))=>json!({"ok":false,"error":e}),None=>json!({"ok":false,"error":"not ported"})};println!("{value}");}
         return;
     }
     if args.get(1).map(String::as_str)==Some("--engine-job-check"){
