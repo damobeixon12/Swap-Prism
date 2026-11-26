@@ -63,6 +63,11 @@ impl App {
             ui.horizontal_wrapped(|ui|{
                 d::muted(ui,"PNG, JPG o WebP · banner 420:100");ui.add_space(8.);
                 let link=|ui:&mut egui::Ui,text:&str,enabled:bool|ui.add_enabled(enabled,egui::Label::new(RichText::new(text).underline().color(d::MUTED())).sense(egui::Sense::click())).on_hover_cursor(egui::CursorIcon::PointingHand).clicked();
+                for (kind,label) in [("avatar","Ajustar foto"),("banner","Ajustar banner")]{
+                    let source=self.image_sources[kind].clone();
+                    let usable=!s(&self.profile_draft,kind).is_empty()&&std::path::Path::new(s(&source,"path")).is_file();
+                    if usable&&link(ui,label,!self.busy){self.open_crop(kind,s(&source,"path"),Some(&source));}
+                }
                 if link(ui,"Quitar avatar",!self.busy&&!s(&self.profile_draft,"avatar").is_empty()){self.profile_draft["avatar"]=json!("");changed=true;}
                 if link(ui,"Quitar banner",!self.busy&&!s(&self.profile_draft,"banner").is_empty()){self.profile_draft["banner"]=json!("");changed=true;}
                 if self.profile_active()&&link(ui,"Volver al perfil original",!self.busy){self.profile_request(json!({"name":"","avatar":"","banner":"","title":null}));}
@@ -71,12 +76,53 @@ impl App {
             d::muted(ui,"Solo lo ves tú, en tu cliente. Los demás jugadores ven tu perfil original.");
         });
         if changed{self.queue_profile(self.profile_draft.clone());}
+        self.crop_window(ui.ctx());
     }
 
     fn pick_profile_image(&mut self,kind:&str){
         if let Some(path)=rfd::FileDialog::new().add_filter("Imagen",&["png","jpg","jpeg","webp"]).pick_file(){
-            self.call("profile_import",json!({"action":"profile_import","kind":kind,"path":path}));
+            self.open_crop(kind,&path.display().to_string(),None);
         }
+    }
+
+    /// Opens the framing viewer; a picture the viewer cannot measure is imported centred, as before.
+    fn open_crop(&mut self,kind:&str,path:&str,last:Option<&Value>){
+        let Ok((w,h))=image::image_dimensions(path) else{self.call("profile_import",json!({"action":"profile_import","kind":kind,"path":path}));return};
+        let (w,h)=(w as f32,h as f32);
+        let mut view=profile::CropView{kind:kind.into(),path:path.into(),size:(w,h),zoom:1.,center:(w/2.,h/2.)};
+        if let Some(l)=last{view.zoom=l["zoom"].as_f64().unwrap_or(1.) as f32;view.center=(l["cx"].as_f64().unwrap_or(w as f64/2.) as f32,l["cy"].as_f64().unwrap_or(h as f64/2.) as f32);}
+        view.clamp();
+        self.crop_view=Some(view);
+    }
+
+    /// The viewer: drag to move, wheel or slider to zoom; the frame shows exactly what will be used.
+    fn crop_window(&mut self,ctx:&egui::Context){
+        let Some(mut view)=self.crop_view.take() else{return};
+        let (mut accept,mut cancel)=(false,false);
+        let banner=view.kind=="banner";
+        egui::Window::new(if banner{"Ajustar banner"}else{"Ajustar foto de perfil"}).collapsible(false).resizable(false).anchor(egui::Align2::CENTER_CENTER,Vec2::ZERO).show(ctx,|ui|{
+            let width=if banner{680.}else{340.};let size=Vec2::new(width,width/view.aspect());
+            let (rect,response)=ui.allocate_exact_size(size,egui::Sense::drag());
+            let [x,y,w,h]=view.crop();
+            let image=egui::Image::from_uri(format!("file://{}",view.path)).uv(egui::Rect::from_min_size(egui::pos2(x,y),Vec2::new(w,h)));
+            if banner{image.paint_at(ui,rect);}else{image.corner_radius(14).paint_at(ui,rect);}
+            ui.painter().rect_stroke(rect,if banner{0}else{14},egui::Stroke::new(1_f32,d::LINE()),egui::StrokeKind::Outside);
+            if response.dragged(){let scale=view.area().0/rect.width();let delta=response.drag_delta();view.center.0-=delta.x*scale;view.center.1-=delta.y*scale;}
+            if response.hovered(){let scroll=ui.input(|i|i.smooth_scroll_delta.y);if scroll!=0.{view.zoom=(view.zoom*(scroll*0.002).exp()).clamp(1.,8.);}}
+            response.on_hover_cursor(egui::CursorIcon::Grab);
+            ui.add_space(10.);
+            ui.horizontal(|ui|{ui.label("Zoom");ui.add(egui::Slider::new(&mut view.zoom,1.0..=8.0).show_value(false));});
+            view.clamp();
+            d::muted(ui,if banner{"Arrastra para mover y usa la rueda para acercar. Así se verá el banner (840×200)."}else{"Arrastra para mover y usa la rueda para acercar. Así se verá tu foto."});
+            ui.add_space(8.);
+            ui.horizontal(|ui|{if ui.add(d::primary("Usar este encuadre")).clicked(){accept=true;}if ui.button("Cancelar").clicked(){cancel=true;}});
+        });
+        if accept{
+            let [x,y,w,h]=view.crop();
+            self.image_sources[&view.kind]=json!({"path":view.path,"zoom":view.zoom,"cx":view.center.0,"cy":view.center.1});
+            let _=fs::write(self.root.join("data/profile-sources.json"),serde_json::to_vec_pretty(&self.image_sources).unwrap_or_default());
+            self.call("profile_import",json!({"action":"profile_import","kind":view.kind,"path":view.path,"crop":[x,y,w,h]}));
+        }else if !cancel{self.crop_view=Some(view);}
     }
 
     pub(super) fn profile_active(&self)->bool{self.profile_state["packages"].as_object().map(|p|!p.is_empty()).unwrap_or(false)}
@@ -108,5 +154,43 @@ impl App {
             });
         });
         ui.add_space(12.);
+    }
+}
+
+/// Framing of a picture for the avatar (square) or banner (840x200): zoom 1 covers the frame, `center` is in picture pixels.
+pub(crate) struct CropView { pub kind: String, pub path: String, pub size: (f32, f32), pub zoom: f32, pub center: (f32, f32) }
+
+impl CropView {
+    fn aspect(&self) -> f32 { if self.kind == "avatar" { 1. } else { 840. / 200. } }
+    /// Visible area in picture pixels (width, height) at the current zoom.
+    fn area(&self) -> (f32, f32) {
+        let (w, h) = self.size;
+        let a = self.aspect();
+        let (cw, ch) = if w / h > a { (h * a, h) } else { (w, w / a) };
+        (cw / self.zoom, ch / self.zoom)
+    }
+    fn clamp(&mut self) {
+        let (cw, ch) = self.area();
+        self.center = (self.center.0.clamp(cw / 2., self.size.0 - cw / 2.), self.center.1.clamp(ch / 2., self.size.1 - ch / 2.));
+    }
+    /// [x, y, width, height] as fractions of the picture, what the engine crops.
+    fn crop(&self) -> [f32; 4] {
+        let (cw, ch) = self.area();
+        [(self.center.0 - cw / 2.) / self.size.0, (self.center.1 - ch / 2.) / self.size.1, cw / self.size.0, ch / self.size.1]
+    }
+}
+
+#[cfg(test)]
+mod crop_tests {
+    use super::CropView;
+    #[test]
+    fn crop_stays_inside_the_picture() {
+        let mut v = CropView { kind: "banner".into(), path: String::new(), size: (1000., 1000.), zoom: 1., center: (0., 0.) };
+        v.clamp();
+        let [x, y, w, h] = v.crop();
+        assert!((w - 1.).abs() < 1e-6 && (h - 0.238_095).abs() < 1e-4 && x == 0. && y == 0.);
+        v.zoom = 2.; v.center = (5000., 5000.); v.clamp();
+        let [x, y, w, h] = v.crop();
+        assert!((x + w - 1.).abs() < 1e-6 && (y + h - 1.).abs() < 1e-6 && (w - 0.5).abs() < 1e-6);
     }
 }

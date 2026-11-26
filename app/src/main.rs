@@ -81,6 +81,10 @@ enum Event {
 }
 struct App {
     rank_draft:Value,
+    /// Viewer to frame a new avatar/banner picture before it is imported.
+    crop_view:Option<profile::CropView>,
+    /// Original pictures and their last framing, so "Ajustar" can reframe them (data/profile-sources.json).
+    image_sources:Value,
     tracker_name:String,tracker_requested:Option<String>,tracker_loaded:String,tracker_error:String,
     tracker_web:Option<wry::WebView>,tracker_context:Option<wry::WebContext>,tracker_bounds:egui::Rect,tracker_last_bounds:Option<wry::Rect>,
     media_data:Value,media_source:String,media_query:String,media_url:String,
@@ -219,6 +223,8 @@ impl App {
         let (tx, rx) = mpsc::channel();
         let app = Self {
             rank_draft:read_json(&root.join("data/rank-draft.json")),
+            crop_view:None,
+            image_sources:read_json(&root.join("data/profile-sources.json")),
             tracker_name:s(&read_json(&root.join("data/tracker.json")),"epic").to_owned(),tracker_requested:None,tracker_loaded:String::new(),tracker_error:String::new(),tracker_web:None,tracker_context:None,tracker_bounds:egui::Rect::NOTHING,tracker_last_bounds:None,
             media_data:json!({}),media_source:String::new(),media_query:String::new(),media_url:String::new(),texture_shop:false,texture_source:0,sound_browser:1,audio_library:vec![],
             page_motion_key:String::new(),page_motion_start:Instant::now(),studio_sound_kind:"reset".into(),

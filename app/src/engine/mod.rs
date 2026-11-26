@@ -46,7 +46,9 @@ pub fn handle(root: &Path, request: &Value, progress: &dyn Fn(Value)) -> Result<
         "restore" => restore(root, request),
         "profile_import" => {
             let kind = request["kind"].as_str().unwrap_or("");
-            profile::import_image(root, Path::new(request["path"].as_str().unwrap_or("")), kind).map(|path| serde_json::json!({"path": path, "kind": kind}))
+            // Optional crop chosen in the viewer: [x, y, width, height] as fractions of the picture.
+            let crop = request["crop"].as_array().and_then(|c| c.iter().map(Value::as_f64).collect::<Option<Vec<f64>>>()).and_then(|c| <[f64; 4]>::try_from(c).ok());
+            profile::import_image(root, Path::new(request["path"].as_str().unwrap_or("")), kind, crop).map(|path| serde_json::json!({"path": path, "kind": kind, "source": request["path"]}))
         }
         "media_catalog" => media::catalog(root, request["source"].as_str().unwrap_or(""), request["query"].as_str().unwrap_or(""), request["refresh"].as_bool().unwrap_or(false), request["url"].as_str().unwrap_or(""))
             .map(|m| serde_json::json!({"media": m, "sounds": media::audio_library(root)})),

@@ -46,8 +46,9 @@ use super::state::{filename, is_epic_original, load_state, modified, pristine, s
 use super::upk::Package;
 use std::path::PathBuf;
 
-/// A picture for the avatar (512²) or banner (840x200), cropped to fit and stored by content hash.
-pub fn import_image(root: &Path, source: &Path, kind: &str) -> R<String> {
+/// A picture for the avatar (512²) or banner (840x200), stored by content hash. `crop` ([x, y, width, height] as fractions
+/// of the picture) is the area chosen in the viewer; without it the centre is cropped to fit.
+pub fn import_image(root: &Path, source: &Path, kind: &str, crop: Option<[f64; 4]>) -> R<String> {
     if kind != "avatar" && kind != "banner" { return Err("Tipo de imagen no válido.".into()); }
     if std::fs::metadata(source).map_err(err)?.len() > 20 * 1024 * 1024 { return Err("La imagen supera los 20 MB.".into()); }
     let reader = image::ImageReader::open(source).map_err(err)?.with_guessed_format().map_err(err)?;
@@ -57,7 +58,19 @@ pub fn import_image(root: &Path, source: &Path, kind: &str) -> R<String> {
     if picture.width() as u64 * picture.height() as u64 > 40_000_000 { return Err("Imagen demasiado grande.".into()); }
     if let Some(orientation) = orientation { picture.apply_orientation(orientation); }
     let (w, h) = if kind == "avatar" { (512, 512) } else { (840, 200) };
-    let raw = super::dxt::png(&super::dxt::fit(&picture.to_rgba8(), w, h))?;
+    let rgba = picture.to_rgba8();
+    let sized = match crop {
+        Some([x, y, cw, ch]) => {
+            if !(x >= 0. && y >= 0. && cw > 0. && ch > 0. && x + cw <= 1.0001 && y + ch <= 1.0001) { return Err("Recorte no válido.".into()); }
+            let (pw, ph) = (rgba.width() as f64, rgba.height() as f64);
+            let (left, top) = ((x * pw).round() as u32, (y * ph).round() as u32);
+            let width = ((cw * pw).round() as u32).clamp(1, rgba.width() - left.min(rgba.width() - 1));
+            let height = ((ch * ph).round() as u32).clamp(1, rgba.height() - top.min(rgba.height() - 1));
+            super::dxt::resize(&image::imageops::crop_imm(&rgba, left.min(rgba.width() - 1), top.min(rgba.height() - 1), width, height).to_image(), w, h)
+        }
+        None => super::dxt::fit(&rgba, w, h),
+    };
+    let raw = super::dxt::png(&sized)?;
     let folder = root.join("data").join("profile").join("images");
     std::fs::create_dir_all(&folder).map_err(err)?;
     use sha2::{Digest, Sha256};
