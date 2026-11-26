@@ -1,4 +1,4 @@
 @echo off
 cd /d "%~dp0"
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\prepare_release.ps1"
+call "%~dp0scripts\swapprism-build.cmd" release
 pause
