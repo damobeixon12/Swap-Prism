@@ -71,6 +71,17 @@ fn replace_instructions(code: &[u8], pick: impl Fn(&[u8], &(usize, usize, u8, Ve
     Ok(out)
 }
 
+/// Diagnostic logging of what each avatar receives (Launch.log, category SwapPrism). Off for releases.
+const AVATAR_LOG: bool = true;
+
+/// Raises a method's max_stack by `extra`.
+fn stack_edit(abc: &Abc, mid: u32, extra: u32) -> R<(usize, usize, Vec<u8>)> {
+    let b = abc.body(mid).ok_or("Método sin cuerpo.")?;
+    let mut r = Reader { data: &abc.data, pos: b.stackpos };
+    r.u30()?;
+    Ok((b.stackpos, r.pos, encode_u30(b.stack + extra)))
+}
+
 fn body_edit(abc: &Abc, mid: u32, code: &[u8]) -> R<(usize, usize, Vec<u8>)> {
     let b = abc.body(mid).ok_or("Método sin cuerpo.")?;
     let mut v = encode_u30(code.len() as u32);
@@ -679,19 +690,60 @@ fn patch_avatar(data: &[u8]) -> R<(Vec<u8>, Vec<String>)> {
         compare.extend(&skip);
         Ok([guard(&ident, &compare), fallback].concat())
     };
-    let code = [&body.code[..scope], &local_only(&render)?[..], &body.code[scope..]].concat();
+    // Diagnostic build: DevUtil.Log("SwapPrism", ...) writes what each avatar receives to the game's Launch.log.
+    let mut extra_strings: Vec<&str> = Vec::new();
+    let log = |label: &str, extra_strings: &mut Vec<&'static str>| -> Option<Vec<u8>> {
+        if !AVATAR_LOG { return None; }
+        let r = |n: &str| abc.reference(n).ok();
+        // Only where DevUtil is defined in this movie: an undefined class would throw and stop the avatar code.
+        abc.class("tagame.api.DevUtil")?;
+        let (dev, logm) = (r("tagame.api.DevUtil")?, r("Log")?);
+        let texts: [&'static str; 10] = ["SwapPrism", "", " id=", " local=", " label=", " frames=", " platform=", " psyonix=", " tinted=", " loader="];
+        let base = abc.strings.len() as u32 + 1;
+        let mut index = |k: usize| -> u32 { base + extra_strings.iter().position(|t| *t == texts[k]).unwrap_or_else(|| { extra_strings.push(texts[k]); extra_strings.len() - 1 }) as u32 };
+        let mut c = op(0x60, dev);
+        c.extend(op(0x2c, index(0)));
+        let _ = label;
+        // Instance name first; each value only when its name exists in this movie (a missing one would throw).
+        match r("name") { Some(n) => { c.push(0xd0); c.extend(op(0x66, n)); } None => c.extend(op(0x2c, index(1))) }
+        let chain = |parts: &[(&[u8], &str)]| -> Option<Vec<u8>> {
+            let mut v = Vec::new();
+            for (prefix, n) in parts { v.extend(*prefix); if !n.is_empty() { v.extend(op(0x66, r(n)?)); } }
+            Some(v)
+        };
+        let fields: [(usize, Option<Vec<u8>>); 8] = [
+            (2, chain(&[(&[0xd0], "tagame.controls:PlayerAvatar.m_playerId")])),
+            (3, r("tagame.api.LocalPlayer").and_then(|l| chain(&[(&op(0x60, l), "PlayerID")]))),
+            (4, chain(&[(&tinted, "currentLabel")])),
+            (5, chain(&[(&tinted, "totalFrames")])),
+            (6, chain(&[(&[0xd0], "tagame.controls:PlayerAvatar.m_platform")])),
+            (7, chain(&[(&[0xd0], "tagame.controls:PlayerAvatar.m_bUsePsyonixAvatar")])),
+            (8, chain(&[(&tinted, "transform"), (&[], "colorTransform")])),
+            (9, chain(&[(&loader, "transform"), (&[], "colorTransform")])),
+        ];
+        for (text, value) in fields {
+            let Some(value) = value else { continue };
+            c.extend(op(0x2c, index(text))); c.extend(value); c.push(0xa0); c.push(0xa0);
+        }
+        c.extend(op(0x4f, logm)); c.push(0x02);
+        Some(c)
+    };
+    let validate_log = log("validate", &mut extra_strings).unwrap_or_default();
+    let code = [&body.code[..scope], &validate_log[..], &local_only(&render)?[..], &body.code[scope..]].concat();
     let mut edits = vec![body_edit(&abc, mid, &code)?];
+    if !validate_log.is_empty() { edits.push(stack_edit(&abc, mid, 6)?); }
     let mut pooled = encode_u30(FRAME.len() as u32);
     pooled.extend(FRAME.as_bytes());
-    edits.push((abc.string_pool_end, abc.string_pool_end, pooled));
     let mut changed: HashMap<u32, Vec<u8>> = HashMap::from([(mid, code)]);
     let tint: Vec<u32> = cls.traits.iter().filter(|t| t.kind == 1 && t.name.ends_with(".updateTeamColor")).filter_map(|t| t.method).collect();
     if let [t] = tint[..] {
         let tbody = abc.body(t).ok_or("Método sin cuerpo.")?;
         if tbody.code.last() == Some(&0x47) && tbody.exceptions == 0 {
             // Runs after every team-colour update, just before the final returnvoid.
-            let tcode = [&tbody.code[..tbody.code.len() - 1], &local_only(&[&untint[..], &[0x47]].concat())?[..], &[0x47]].concat();
+            let team_log = log("team", &mut extra_strings).unwrap_or_default();
+            let tcode = [&tbody.code[..tbody.code.len() - 1], &local_only(&[&untint[..], &[0x47]].concat())?[..], &team_log[..], &[0x47]].concat();
             edits.push(body_edit(&abc, t, &tcode)?);
+            if !team_log.is_empty() { edits.push(stack_edit(&abc, t, 6)?); }
             changed.insert(t, tcode);
         }
     }
@@ -720,7 +772,9 @@ fn patch_avatar(data: &[u8]) -> R<(Vec<u8>, Vec<String>)> {
             changed.insert(w, wcode);
         }
     }
-    edits.push(count_edit(&abc, 1)?);
+    for text in &extra_strings { pooled.extend(encode_u30(text.len() as u32)); pooled.extend(text.as_bytes()); }
+    edits.push((abc.string_pool_end, abc.string_pool_end, pooled));
+    edits.push(count_edit(&abc, 1 + extra_strings.len())?);
     let result = splice(&abc, &mut edits);
     let after = Abc::parse(&result)?;
     if after.classes != abc.classes || after.methods != abc.methods { return Err("Cambió una definición del avatar.".into()); }
@@ -731,10 +785,11 @@ fn patch_avatar(data: &[u8]) -> R<(Vec<u8>, Vec<String>)> {
 }
 
 /// Every presentation patch for one GFx movie: (movie, fields, features).
-pub fn patch_movie(movie: &[u8], name: &str, title: &Value, avatar: Option<&[u8]>, rank: &Value) -> R<(Vec<u8>, Vec<String>, BTreeSet<String>)> {
+/// `frame`: false keeps the movie without the photo frame (only the shared avatar code, which then stays native).
+pub fn patch_movie(movie: &[u8], name: &str, title: &Value, avatar: Option<&[u8]>, rank: &Value, frame: bool) -> R<(Vec<u8>, Vec<String>, BTreeSet<String>)> {
     let mut movie = movie.to_vec();
     let mut avatar_fields = Vec::new();
-    if let Some(picture) = avatar {
+    if let Some(picture) = avatar.filter(|_| frame) {
         let (m, embedded) = add_local_frame(&movie, picture)?;
         movie = m;
         if embedded { avatar_fields.push("TintedAvatarIcons.localFrame".to_string()); }
@@ -783,8 +838,10 @@ pub fn patch_package(pkg: &Package, name: &str, images: &[(String, Vec<u8>)], ti
     let mut movies = BTreeSet::new();
     let (mut fields, mut paths, mut features) = (Vec::new(), Vec::new(), BTreeSet::new());
     let mut avatar = avatar.or(images.iter().find(|i| i.0 == "avatar").map(|i| i.1.as_slice()));
-    // The goal replay HUD flags the replayed player as local, which tinted other players' photos black.
-    if pkg.file.file_name().is_some_and(|f| f.to_string_lossy().to_lowercase() == "gfx_replayhud_sf.upk") { avatar = None; }
+    // The goal replay HUD never gets the photo frame. The diagnostic build still gives it the (guarded, native-looking)
+    // avatar code so its avatars log what they receive.
+    let replay = pkg.file.file_name().is_some_and(|f| f.to_string_lossy().to_lowercase() == "gfx_replayhud_sf.upk");
+    if replay && !AVATAR_LOG { avatar = None; }
     let titled = !title.is_null() && !title.as_object().is_some_and(|m| m.is_empty());
     let ranked = !rank.is_null() && !rank.as_object().is_some_and(|m| m.is_empty());
     if !name.is_empty() || titled || avatar.is_some() || ranked {
@@ -797,7 +854,7 @@ pub fn patch_package(pkg: &Package, name: &str, images: &[(String, Vec<u8>)], ti
             let movie = &data[at..at + raw.size - 4];
             // Some static GFX have no ActionScript; leave them intact.
             if !swf_tags(movie)?.iter().any(|t| t.0 == 82) { continue; }
-            let (new, changed, found) = patch_movie(movie, &name, title, avatar, rank)?;
+            let (new, changed, found) = patch_movie(movie, &name, title, avatar, rank, !replay)?;
             features.extend(found);
             if changed.is_empty() { continue; }
             let mut serial = [&data[..at], &new[..], &data[at + movie.len()..]].concat();
@@ -905,7 +962,7 @@ mod parity {
     fn real_avatar_patch_is_valid() {
         let folder = std::path::PathBuf::from(std::env::var("SP_BACKUPS").unwrap());
         let picture = std::fs::read(std::env::var("SP_PICTURE").unwrap()).unwrap();
-        let (mut checked, mut waiting, mut rewritten) = (0, 0, 0);
+        let (mut checked, mut waiting, mut rewritten, mut logged) = (0, 0, 0, 0);
         let mut original_bodies: HashMap<(String, usize, u32), Vec<u8>> = HashMap::new();
         for entry in std::fs::read_dir(&folder).unwrap().flatten() {
             let file = entry.file_name().to_string_lossy().to_string();
@@ -941,6 +998,7 @@ mod parity {
                         rewritten += 1;
                     }
                 }
+                if abc.strings.iter().any(|x| x == " loader=") { logged += 1; }
                 if let Some(c) = abc.class("tagame.hud.WaitingForPlayerRenderer") {
                     let m = c.traits.iter().find(|t| t.name.ends_with(".setConnectionStatus")).and_then(|t| t.method).unwrap();
                     if abc.body(m).unwrap().code.iter().filter(|b| **b == 0x2a).count() >= 4 { waiting += 1; }
@@ -948,7 +1006,10 @@ mod parity {
                 checked += 1;
             }
         }
+        // Diagnostic build: count movies whose PlayerAvatar logs to the game.
+        println!("REGISTRO en {} peliculas", logged);
         println!("RESUMEN {checked} peliculas, {rewritten} metodos reescritos con saltos validos, lista de espera en {waiting}");
         assert!(checked > 50 && waiting >= 1);
     }
 }
+
