@@ -11,8 +11,8 @@ const DEFAULT_KEY: [u8; 32] = [
     0xC7, 0xDF, 0x6B, 0x13, 0x25, 0x2A, 0xCC, 0x71, 0x47, 0xBB, 0x51, 0xC9, 0x8A, 0xD7, 0xE3, 0x4B,
     0x7F, 0xE5, 0x00, 0xB7, 0x7F, 0xA5, 0xFA, 0xB2, 0x93, 0xE2, 0xF2, 0x4E, 0x6B, 0x17, 0xE7, 0x79,
 ];
-const KEYS: &str = include_str!("../../../engine/motor/keys.txt");
-const KEYS_MAP: &str = include_str!("../../../engine/motor/keys_map.json");
+const KEYS: &str = include_str!("../../assets/engine/keys.txt");
+const KEYS_MAP: &str = include_str!("../../assets/engine/keys_map.json");
 
 pub fn i32_at(d: &[u8], o: usize) -> i32 { i32::from_le_bytes(d[o..o + 4].try_into().unwrap()) }
 pub fn i64_at(d: &[u8], o: usize) -> i64 { i64::from_le_bytes(d[o..o + 8].try_into().unwrap()) }

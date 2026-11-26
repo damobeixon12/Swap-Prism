@@ -29,7 +29,7 @@ use std::os::windows::process::CommandExt;
 use std::{
     collections::BTreeMap,
     fs,
-    io::{Write,Read,BufRead,BufReader},
+    io::Write,
     path::{Path, PathBuf},
     process::{Command, Stdio},
     sync::mpsc::{self, Receiver, Sender},
@@ -66,41 +66,7 @@ fn worker(root: &Path, request: &Value) -> Result<Value, String> {
     worker_progress(root,request,|_|{})
 }
 fn worker_progress(root: &Path, request: &Value, progress:impl Fn(Value)) -> Result<Value,String> {
-    if let Some(result)=engine::handle(root,request,&progress){return result;}
-    let mut child = Command::new(root.join("_engine/SWAPPRISMEngine.exe"))
-        .env("SWAPPRISM_ROOT", root)
-        .env("PYTHONIOENCODING", "utf-8")
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .creation_flags(0x08000000)
-        .spawn()
-        .map_err(|e| format!("No se puede iniciar el motor: {e}"))?;
-    child
-        .stdin
-        .take()
-        .ok_or("Canal del motor no disponible")?
-        .write_all(format!("{request}\n").as_bytes())
-        .map_err(|e| e.to_string())?;
-    let mut stderr=child.stderr.take().ok_or("Canal de diagnóstico no disponible")?;
-    let errors=thread::spawn(move||{let mut bytes=Vec::new();let _=stderr.read_to_end(&mut bytes);bytes});
-    let stdout=child.stdout.take().ok_or("Canal de respuesta no disponible")?;
-    let mut result=None;
-    for line in BufReader::new(stdout).lines(){
-        let line=line.map_err(|e|e.to_string())?;
-        if let Ok(frame)=serde_json::from_str::<Value>(&line){
-            if frame["progress"].is_object(){progress(frame["progress"].clone());}
-            else if frame["ok"].is_boolean(){result=Some(frame);}
-        }
-    }
-    let _=child.wait().map_err(|e|e.to_string())?;
-    let diagnostics=errors.join().unwrap_or_default();
-    let result=result.ok_or_else(||format!("El motor terminó sin respuesta. {}",String::from_utf8_lossy(&diagnostics).chars().take(1000).collect::<String>()))?;
-    if result["ok"] == true {
-        Ok(result["result"].clone())
-    } else {
-        Err(s(&result, "error").into())
-    }
+    engine::handle(root,request,&progress)
 }
 enum Event {
     Progress(Value),
@@ -725,7 +691,7 @@ fn main() {
         .to_path_buf();
     let args: Vec<_> = std::env::args().collect();
     if args.get(1).map(String::as_str)==Some("--engine-run"){
-        if let Some(input)=args.get(2){let request=read_json(Path::new(input));let root=std::env::var_os("SWAPPRISM_ROOT").map(PathBuf::from).unwrap_or(root.clone());let value=match engine::handle(&root,&request,&|_|{}){Some(Ok(v))=>json!({"ok":true,"result":v}),Some(Err(e))=>json!({"ok":false,"error":e}),None=>json!({"ok":false,"error":"not ported"})};println!("{value}");}
+        if let Some(input)=args.get(2){let request=read_json(Path::new(input));let root=std::env::var_os("SWAPPRISM_ROOT").map(PathBuf::from).unwrap_or(root.clone());let value=match engine::handle(&root,&request,&|_|{}){Ok(v)=>json!({"ok":true,"result":v}),Err(e)=>json!({"ok":false,"error":e})};println!("{value}");}
         return;
     }
     if args.get(1).map(String::as_str)==Some("--engine-job-check"){
@@ -750,7 +716,7 @@ fn main() {
         return;
     }
     if args.get(1).map(String::as_str) == Some("--diagnose") {
-        let report = json!({"version":VERSION,"game":platform::detect(None).map(|(p,v)|json!({"path":p,"version":v})),"engine":root.join("_engine/SWAPPRISMEngine.exe").is_file(),"updates_published":!s(&platform::config(&root),"update_manifest_url").is_empty()});
+        let report = json!({"version":VERSION,"game":platform::detect(None).map(|(p,v)|json!({"path":p,"version":v})),"engine":"native","updates_published":!s(&platform::config(&root),"update_manifest_url").is_empty()});
         if let Some(p) = args.get(2) {
             let _ = fs::write(p, report.to_string());
         }

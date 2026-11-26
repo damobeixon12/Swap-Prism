@@ -224,7 +224,7 @@ pub fn abc_tag(data: &[u8]) -> R<(usize, usize, usize, usize, Abc)> {
 
 pub fn operand_count(op: u8) -> i32 {
     static TABLE: std::sync::OnceLock<Vec<i32>> = std::sync::OnceLock::new();
-    TABLE.get_or_init(|| serde_json::from_str(include_str!("../../../engine/avm2_operands.json")).unwrap_or_default())[op as usize]
+    TABLE.get_or_init(|| serde_json::from_str(include_str!("../../assets/engine/avm2_operands.json")).unwrap_or_default())[op as usize]
 }
 
 /// Every instruction (start, end, opcode, operands) of a method body.

@@ -1,5 +1,4 @@
-//! Native engine, replacing engine/*.py one module at a time. Actions ported here run in-process; every other action
-//! still goes to the Python engine (_engine/SWAPPRISMEngine.exe) through the same JSON protocol.
+//! The engine: every action of the JSON protocol, run in-process (formerly the Python engine in _engine/).
 pub mod aes;
 pub mod apply;
 pub mod body;
@@ -27,10 +26,8 @@ pub mod zip;
 use serde_json::Value;
 use std::path::Path;
 
-/// None when the action is not ported yet. SWAPPRISM_PYTHON_ONLY=1 forces the Python engine (parity checks).
-pub fn handle(root: &Path, request: &Value, progress: &dyn Fn(Value)) -> Option<Result<Value, String>> {
-    if std::env::var_os("SWAPPRISM_PYTHON_ONLY").is_some() { return None; }
-    Some(match request["action"].as_str()? {
+pub fn handle(root: &Path, request: &Value, progress: &dyn Fn(Value)) -> Result<Value, String> {
+    match request["action"].as_str().unwrap_or("") {
         "game_settings" => game_settings::read(None),
         "game_settings_write" => game_settings::write(root, &request["changes"], None),
         action if action.starts_with("launcher_") => launcher::handle(root, action, request),
@@ -64,8 +61,8 @@ pub fn handle(root: &Path, request: &Value, progress: &dyn Fn(Value)) -> Option<
             let (found, errors) = library::scan(Path::new(request["path"].as_str().unwrap_or("")));
             library::save_library(&root.join("data").join("texture_library"), &found).and_then(|_| library::packs(root)).map(|packs| serde_json::json!({"packs": packs, "errors": errors}))
         }
-        _ => return None,
-    })
+        _ => Err("Acción no disponible.".into()),
+    }
 }
 
 fn verify_files(root: &Path, request: &Value) -> Result<Value, String> {
