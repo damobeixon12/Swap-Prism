@@ -3,6 +3,7 @@
 pub mod aes;
 pub mod body;
 pub mod colors;
+pub mod display;
 pub mod dxt;
 pub mod epic;
 pub mod game_settings;
