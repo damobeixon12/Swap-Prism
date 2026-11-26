@@ -6,6 +6,8 @@ pub mod colors;
 pub mod dxt;
 pub mod epic;
 pub mod game_settings;
+pub mod hud;
+pub mod jobs;
 pub mod launcher;
 pub mod library;
 pub mod profile;

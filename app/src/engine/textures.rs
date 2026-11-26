@@ -241,7 +241,7 @@ pub fn bindings(pkg: &Package, flat: &[u8]) -> Vec<(String, Vec<usize>)> {
 }
 
 /// Add only an existing shader mask parameter, reusing the pack's local blank texture.
-fn add_mask_binding(pkg: &Package, flat: &[u8], raw: &[u8], replacements: &mut BTreeMap<usize, Vec<u8>>) -> R<bool> {
+pub fn add_mask_binding(pkg: &Package, flat: &[u8], raw: &[u8], replacements: &mut BTreeMap<usize, Vec<u8>>) -> R<bool> {
     let parameter = "2_Diffuse_Skin_Mask";
     let Some(param_index) = name_index(pkg, parameter) else { return Ok(false) };
     let blanks: Vec<usize> = pkg.exports.iter().enumerate().filter(|(_, e)| pkg.class_name(e) == "Texture2D" && pkg.export_name(e) == "T_BlackAlpha").map(|(i, _)| i).collect();
