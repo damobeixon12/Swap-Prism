@@ -17,12 +17,12 @@ El historial completo de decisiones está en `docs/historial/`.
 
 ## Arquitectura en una línea
 
-App Rust (`app/`) → lanza `_engine/SWAPPRISMEngine.exe` (motor Python de `engine/`, empaquetado con PyInstaller) con `SWAPPRISM_ROOT` = carpeta de la app → datos en `data/`.
+Todo es Rust (`app/`): interfaz y motor (`app/src/engine/`) en el mismo `Swap Prism.exe`, raíz = carpeta de la app → datos en `data/`. El motor Python antiguo está en `main`/etiqueta `backup-antes-de-rust`.
 
 ## Compilación
 
-`scripts/package_swapprism.ps1` (pruebas + Rust + motor + instalador); `Preparar update.cmd` para publicar.
-Pruebas del motor: `python -m unittest discover -s engine/tests -t engine`.
+`scripts\swapprism-build.cmd package` (pruebas + Rust + instalador); `Preparar update.cmd` para publicar (`release`).
+`scripts\swapprism-build.cmd check-installer` prueba el instalador (Swap Prism debe estar cerrado).
 
 ## Instalaciones del usuario
 

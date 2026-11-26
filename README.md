@@ -8,7 +8,7 @@
 [![Downloads](https://img.shields.io/github/downloads/damobeixon12/Swap-Prism/total?label=downloads&color=blue)](https://github.com/damobeixon12/Swap-Prism/releases)
 [![Platform](https://img.shields.io/badge/platform-Windows-0078D6?logo=windows&logoColor=white)](#installation)
 [![Built with Rust](https://img.shields.io/badge/UI-Rust%20%2B%20egui-000000?logo=rust&logoColor=white)](#architecture)
-[![Engine](https://img.shields.io/badge/engine-Python-3776AB?logo=python&logoColor=white)](#architecture)
+[![Engine](https://img.shields.io/badge/engine-Rust-000000?logo=rust&logoColor=white)](#architecture)
 [![Discord](https://img.shields.io/badge/Discord-join%20the%20community-5865F2?logo=discord&logoColor=white)](https://discord.gg/dXa24Y5HtX)
 
 <a href="https://github.com/damobeixon12/Swap-Prism/releases/latest/download/Swap-Prism-Setup.exe">
@@ -73,14 +73,14 @@ All changes are processed locally through an operation queue, with backups and r
 
 ## Architecture
 
-Swap Prism combines two components:
+Swap Prism is a single native Rust application:
 
-- **Native interface:** built with Rust and [egui](https://github.com/emilk/egui).
-- **Asset processing engine:** packaged with Python.
+- **Interface:** built with [egui](https://github.com/emilk/egui).
+- **Asset processing engine:** built into the same executable.
 
 Operations run in the background and communicate through structured JSON messages. The engine performs compatibility and integrity checks, creates backups, and applies changes transactionally.
 
-The application is distributed with an NSIS installer and a native update component. **Neither Rust nor Python needs to be installed** to use it.
+The application is distributed with an NSIS installer and a native update component. **Nothing else needs to be installed** to use it.
 
 ## Installation
 
