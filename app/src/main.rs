@@ -13,6 +13,7 @@ mod navigation;
 mod media;
 mod tracker;
 mod live_match;
+mod engine;
 mod community;
 mod update_panel;
 mod ranks;
@@ -65,6 +66,7 @@ fn worker(root: &Path, request: &Value) -> Result<Value, String> {
     worker_progress(root,request,|_|{})
 }
 fn worker_progress(root: &Path, request: &Value, progress:impl Fn(Value)) -> Result<Value,String> {
+    if let Some(result)=engine::handle(root,request){return result;}
     let mut child = Command::new(root.join("_engine/SWAPPRISMEngine.exe"))
         .env("SWAPPRISM_ROOT", root)
         .env("PYTHONIOENCODING", "utf-8")
@@ -722,6 +724,10 @@ fn main() {
         .unwrap()
         .to_path_buf();
     let args: Vec<_> = std::env::args().collect();
+    if args.get(1).map(String::as_str)==Some("--engine-run"){
+        if let Some(input)=args.get(2){let request=read_json(Path::new(input));let value=match engine::handle(&root,&request){Some(Ok(v))=>json!({"ok":true,"result":v}),Some(Err(e))=>json!({"ok":false,"error":e}),None=>json!({"ok":false,"error":"not ported"})};println!("{value}");}
+        return;
+    }
     if args.get(1).map(String::as_str)==Some("--engine-job-check"){
         if let (Some(input),Some(output))=(args.get(2),args.get(3)){
             let target=PathBuf::from(output);let progress_path=target.with_extension("progress.jsonl");
