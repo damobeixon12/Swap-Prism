@@ -2,6 +2,7 @@
 //! still goes to the Python engine (_engine/SWAPPRISMEngine.exe) through the same JSON protocol.
 pub mod aes;
 pub mod colors;
+pub mod dxt;
 pub mod epic;
 pub mod game_settings;
 pub mod launcher;
@@ -9,6 +10,7 @@ pub mod profile;
 pub mod save;
 pub mod state;
 pub mod studio;
+pub mod textures;
 pub mod upk;
 pub mod util;
 pub mod workshop;
