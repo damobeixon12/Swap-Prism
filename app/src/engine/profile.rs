@@ -6,7 +6,7 @@ use std::path::Path;
 
 pub const SCHEMA: i64 = 1;
 /// Bump when generated profile packages change, so installed profiles are rebuilt.
-pub const CODEC_REVISION: i64 = 12;
+pub const CODEC_REVISION: i64 = 13;
 
 pub fn load(root: &Path) -> R<Value> {
     let path = root.join("data").join("profile.json");

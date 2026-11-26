@@ -128,7 +128,7 @@ fn prepare_all(root: &Path, plans: Vec<Plan>, game: &Path, version: &str, progre
         jobs.push(job);
         let companions = match plan {
             Plan::Texture { pack, .. } if pack.category == "Boostmeter" => generate_meter_companions(root, game, pack, &output)?,
-            Plan::Texture { pack, .. } if pack.category == "Pelota" => super::jobs::generate_ball_companions(root, game, pack, &output)?,
+            Plan::Texture { pack, .. } if pack.category == "Pelota" => super::jobs::generate_ball_companions(root, game, pack, &output, &packages)?,
             _ => Vec::new(),
         };
         for companion in companions {
@@ -185,7 +185,9 @@ pub fn apply(root: &Path, request: &Value, progress: &dyn Fn(Value)) -> R<Value>
             let digest = selected["digest"].as_str().unwrap_or("");
             let pack = library.iter().find(|p| p.digest == digest).cloned().ok_or(format!("'{digest}'"))?;
             if pack.category == "Decal" {
-                let template = if !pack.body_id.is_null() && pack.body_id != 0 { by_id(&pack.body_id).and_then(|r| r["Product"].as_str().map(str::to_owned)) }
+                // BodyID -1 marks a universal decal (any car).
+                let template = if pack.body_id.as_i64().is_some_and(|b| b < 0) { Some(car.clone()) }
+                    else if !pack.body_id.is_null() && pack.body_id != 0 { by_id(&pack.body_id).and_then(|r| r["Product"].as_str().map(str::to_owned)) }
                     else if pack.source.to_lowercase().contains("fenec") { Some("Fennec".into()) } else { Some(car.clone()) };
                 if target.as_ref().is_none_or(|t| t["Slot"] != "Decal") || template.as_deref() != Some(car.as_str()) { return Err("La plantilla de decal debe corresponder al coche guardado.".into()); }
             } else if pack.category != "Boostmeter" && pack.category != "Pelota" { return Err("Tipo de textura no disponible.".into()); }

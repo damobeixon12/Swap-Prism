@@ -15,7 +15,8 @@ impl App{
         fn effective(value:&Value)->Value{
             let mut out=json!({});
             if value["palette"]["enabled"]==true{out["palette"]=value["palette"].clone();}
-            if value["reset_enabled"]==true{out["reset"]=value["reset_color"].clone();}
+            // Own key: "reset" below is the reset sound.
+            if value["reset_enabled"]==true{out["reset_color"]=value["reset_color"].clone();}
             if value["season_enabled"]==true{out["season"]=value["season"].clone();}
             for key in ["reset","post"]{if value["sounds"][key].is_object(){out[key]=value["sounds"][key].clone();}}
             out

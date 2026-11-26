@@ -28,3 +28,4 @@ Los datos y contenidos del perfil proceden del sitio de Tracker Network.
 Insignias de rango: imágenes nativas de Rocket League / Psyonix, extraídas
 de Startup.upk para la vista previa local. Referencias en app/assets/ranks/sources.json.
 
+Logo de Discord: marca de Discord Inc., trazado de Simple Icons (CC0); solo enlaza al servidor de Swap Prism.

@@ -17,7 +17,6 @@ pub struct Preferences {
     pub rank: bool,
     pub rank_modes: Vec<i64>,
     pub rank_position: Option<[f32; 2]>,
-    pub rank_tab: bool,
     pub rank_anchor: String,
     pub rank_lobby: bool,
 }
@@ -32,7 +31,6 @@ impl Default for Preferences {
             rank: false,
             rank_modes: vec![10, 11, 13],
             rank_position: None,
-            rank_tab: true,
             rank_anchor: "left".into(),
             rank_lobby: true,
         }
@@ -51,7 +49,6 @@ pub struct Placement {
 pub struct RankBoard {
     pub tiers: Vec<(i64, usize)>,
     pub mmr: Vec<(i64, String)>,
-    pub shown: bool,
     /// Everyone in a ranked match, drawn next to their row of the in-game scoreboard.
     pub lobby: Vec<LobbyRow>,
 }
@@ -67,18 +64,14 @@ pub struct LobbyRow {
 pub const RANK_ROWS: [(i64, &str); 3] = [(10, "1v1"), (11, "2v2"), (13, "3v3")];
 pub const RANK_ANCHORS: [(&str, &str); 5] = [("left", "Izquierda"), ("top-left", "Arriba a la izquierda"), ("bottom-left", "Abajo a la izquierda"), ("top-right", "Arriba a la derecha"), ("bottom-right", "Abajo a la derecha")];
 
-/// Watches the scoreboard button on its own thread so the toggle works while Swap Prism is in the background.
-fn watch_scoreboard(ctx: &egui::Context, board: Arc<Mutex<RankBoard>>) {
+/// Polls the scoreboard button on its own thread (works while Swap Prism is in the background).
+fn watch_scoreboard(ctx: &egui::Context) {
     static STARTED: std::sync::Once = std::sync::Once::new();
     let ctx = ctx.clone();
     STARTED.call_once(move || {
         std::thread::spawn(move || loop {
             let held = platform::scoreboard_held();
-            if platform::scoreboard_pressed() && platform::foreground_game() {
-                let mut board = board.lock().unwrap();
-                board.shown = !board.shown;
-                ctx.request_repaint();
-            }
+            platform::scoreboard_pressed();
             if held != platform::scoreboard_held() { ctx.request_repaint(); }
             std::thread::sleep(Duration::from_millis(30));
         });
@@ -100,7 +93,7 @@ fn rank_position(p: &Preferences, bounds: [f32; 4], scale: f32, height: f32) -> 
     }
 }
 
-/// Shown whenever the game is in front, or toggled with the scoreboard button; no background.
+/// Your own rank and MMR, shown whenever it is enabled and the game is in front; no background.
 pub fn show_ranks(ctx: &egui::Context, preferences: &Preferences, board: Arc<Mutex<RankBoard>>, placement: Arc<Mutex<Placement>>) {
     let editing = placement.lock().unwrap().editing;
     let rows: Vec<(i64, &str)> = RANK_ROWS.iter().copied().filter(|r| preferences.rank_modes.contains(&r.0)).collect();
@@ -108,13 +101,8 @@ pub fn show_ranks(ctx: &egui::Context, preferences: &Preferences, board: Arc<Mut
         platform::overlay_visibility(RANK_TITLE, false);
         return;
     }
-    let tab = preferences.rank_tab;
-    watch_scoreboard(ctx, board.clone());
+    watch_scoreboard(ctx);
     show_scoreboard(ctx, board.clone());
-    if tab && !editing && !board.lock().unwrap().shown {
-        platform::overlay_visibility(RANK_TITLE, false);
-        return;
-    }
     let scale = ctx.pixels_per_point();
     let bounds = platform::game_bounds().unwrap_or([0., 0., 1280. * scale, 860. * scale]);
     let height = rows.len() as f32 * 40. + if editing { 30. } else { 8. };
@@ -136,7 +124,7 @@ pub fn show_ranks(ctx: &egui::Context, preferences: &Preferences, board: Arc<Mut
         let editing = placement.lock().unwrap().editing;
         platform::transparent_overlay(RANK_TITLE, editing);
         let board = board.lock().unwrap();
-        platform::overlay_visibility(RANK_TITLE, editing || ((board.shown || !tab) && platform::foreground_game()));
+        platform::overlay_visibility(RANK_TITLE, editing || platform::foreground_game());
         egui::CentralPanel::default().frame(egui::Frame::new().fill(Color32::TRANSPARENT).inner_margin(4)).show(ctx, |ui| {
             for (id, label) in &rows {
                 let tier = board.tiers.iter().find(|t| t.0 == *id).map(|t| t.1).unwrap_or(0);
@@ -359,13 +347,7 @@ impl App {
                     if changed{self.save_overlay();}
                 });
                 ui.add_space(8.);
-                ui.horizontal_wrapped(|ui|{
-                    ui.label("Cuándo:");
-                    let mut changed=ui.radio_value(&mut self.overlay_preferences.rank_tab,true,"Al pulsar el marcador (Tab / View)").changed();
-                    changed|=ui.radio_value(&mut self.overlay_preferences.rank_tab,false,"Siempre").changed();
-                    if changed{self.save_overlay();}
-                });
-                design::muted(ui,if self.overlay_preferences.rank_tab{"Pulsa el marcador una vez y se queda; vuelve a pulsarlo para quitarlo."}else{"Sale solo siempre que estás en el juego."});
+                design::muted(ui,"Sale siempre que estás en el juego. El rango de todos aparece junto al marcador mientras mantienes su botón.");
                 ui.add_space(8.);
                 ui.horizontal_wrapped(|ui|{
                     ui.label("Dónde:");

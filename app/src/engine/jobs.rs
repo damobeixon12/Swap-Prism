@@ -238,21 +238,42 @@ pub fn generate_texture(root: &Path, game: &Path, pack: &TexturePack, output: &P
 }
 
 /// Same ball texture in every mode's package; skips packages another change already uses.
-pub fn generate_ball_companions(root: &Path, game: &Path, pack: &TexturePack, output: &Path) -> R<Vec<PathBuf>> {
+/// The ball in every other package that carries it (`taken`: packages already used by other changes are left alone).
+pub fn generate_ball_companions(root: &Path, game: &Path, pack: &TexturePack, output: &Path, taken: &[String]) -> R<Vec<PathBuf>> {
     let cooked = game.join("TAGame").join("CookedPCConsole");
     let state = super::state::load_state(&root.join("data"))?;
-    let mut jobs = Vec::new();
-    for name in super::ball_companions() {
-        let entry = state.get(&name);
-        if !cooked.join(&name).exists() || entry.is_some_and(|e| e["status"] == "installed" && e["hud_display_companion"] != true) { continue; }
-        let job = generate_texture(root, game, pack, output, None, None, Some(&name))?;
-        let mut report = super::state::read_report(&job)?;
-        report["hud_display_companion"] = true.into();
-        report["target"]["Product"] = format!("Pelota · {}", &name[9..name.len() - 7]).into();
-        write_report(&job.join("informe.json"), &report, false)?;
-        jobs.push(job);
-    }
-    Ok(jobs)
+    let names: Vec<String> = super::ball_companions(&cooked, &root.join("data"))?.into_iter().filter(|name| {
+        let entry = state.get(name);
+        cooked.join(name).exists() && !taken.contains(&name.to_lowercase())
+            && !entry.is_some_and(|e| e["status"] == "installed" && e["hud_display_companion"] != true)
+    }).collect();
+    // Packages are independent; a few at a time (maps are large, memory stays bounded).
+    let threads = std::thread::available_parallelism().map_or(2, |n| n.get()).clamp(1, 4);
+    let next = std::sync::atomic::AtomicUsize::new(0);
+    let results: Vec<R<PathBuf>> = std::thread::scope(|s| {
+        let workers: Vec<_> = (0..threads).map(|_| s.spawn(|| {
+            let mut done = Vec::new();
+            loop {
+                let i = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                let Some(name) = names.get(i) else { break };
+                done.push((i, (|| {
+                    let job = generate_texture(root, game, pack, output, None, None, Some(name))?;
+                    let mut report = super::state::read_report(&job)?;
+                    report["hud_display_companion"] = true.into();
+                    let label = name.trim_end_matches(".upk").trim_end_matches("_SF").trim_end_matches("_sf");
+                    let label = if label.to_lowercase().starts_with("gameinfo_") { &label[9..] } else { label };
+                    report["target"]["Product"] = format!("Pelota · {label}").into();
+                    write_report(&job.join("informe.json"), &report, false)?;
+                    Ok(job)
+                })()));
+            }
+            done
+        })).collect();
+        let mut all: Vec<(usize, R<PathBuf>)> = workers.into_iter().flat_map(|w| w.join().unwrap_or_default()).collect();
+        all.sort_by_key(|r| r.0);
+        all.into_iter().map(|r| r.1).collect()
+    });
+    results.into_iter().collect()
 }
 
 /// Utopia Retro replaced by a library map, or restored.

@@ -38,6 +38,39 @@ fn count_edit(abc: &Abc, extra: usize) -> R<(usize, usize, Vec<u8>)> {
     r.u30()?;
     Ok((abc.string_count_pos, r.pos, encode_u30((abc.strings.len() + extra) as u32)))
 }
+/// Replaces chosen instructions by new code and re-targets every branch (s24 jumps and lookupswitch) to the moved code.
+fn replace_instructions(code: &[u8], pick: impl Fn(&[u8], &(usize, usize, u8, Vec<u32>)) -> Option<Vec<u8>>) -> R<Vec<u8>> {
+    let list = super::hud::instructions(code)?;
+    let pieces: Vec<Vec<u8>> = list.iter().map(|i| pick(code, i).unwrap_or_else(|| code[i.0..i.1].to_vec())).collect();
+    let mut moved: HashMap<usize, usize> = HashMap::new();
+    let mut at = 0;
+    for (i, piece) in list.iter().zip(&pieces) { moved.insert(i.0, at); at += piece.len(); }
+    moved.insert(code.len(), at);
+    let s24 = |b: &[u8]| i32::from_le_bytes([b[0], b[1], b[2], if b[2] & 0x80 != 0 { 0xff } else { 0 }]) as i64;
+    let target = |old: i64| moved.get(&usize::try_from(old).unwrap_or(usize::MAX)).copied().ok_or("Salto fuera de una instrucción.");
+    let mut out = Vec::with_capacity(at);
+    for ((start, end, op, _), piece) in list.iter().zip(pieces) {
+        let mut piece = piece;
+        let new_start = out.len() as i64;
+        if piece[..] == code[*start..*end] {
+            if (0x0c..=0x1a).contains(op) {
+                let to = target(*end as i64 + s24(&code[start + 1..start + 4]))? as i64;
+                piece[1..4].copy_from_slice(&((to - (new_start + 4)) as i32).to_le_bytes()[..3]);
+            } else if *op == 0x1b {
+                let mut r = Reader { data: code, pos: start + 4 };
+                let n = r.u30()? as usize;
+                let cases = r.pos - start;
+                for k in std::iter::once(1).chain((0..=n).map(|j| cases + j * 3)) {
+                    let to = target(*start as i64 + s24(&code[start + k..start + k + 3]))? as i64;
+                    piece[k..k + 3].copy_from_slice(&((to - new_start) as i32).to_le_bytes()[..3]);
+                }
+            }
+        }
+        out.extend(piece);
+    }
+    Ok(out)
+}
+
 fn body_edit(abc: &Abc, mid: u32, code: &[u8]) -> R<(usize, usize, Vec<u8>)> {
     let b = abc.body(mid).ok_or("Método sin cuerpo.")?;
     let mut v = encode_u30(code.len() as u32);
@@ -618,6 +651,20 @@ fn patch_avatar(data: &[u8]) -> R<(Vec<u8>, Vec<String>)> {
     render.extend(&tinted); render.extend(op(0x2c, abc.strings.len() as u32)); render.extend(op(0x4f, abc.reference("gotoAndStop")?)); render.push(0x01);
     render.extend(&untint); render.push(0x47);
     let guard = |check: &[u8], code: &[u8]| [check, &jump(0x12, code.len()), code].concat();
+    // The class can be shared with movies without the photo frame (the goal replay loads the shell's PlayerAvatar):
+    // there the icon must stay native, or it shows as an empty black avatar. The frame is the sprite's last one.
+    let mut untint = untint;
+    if let (Ok(total), Ok(label), Ok(goto)) = (abc.reference("totalFrames"), abc.reference("currentLabel"), abc.reference("gotoAndStop")) {
+        let has_frame = |code: &[u8]| -> Vec<u8> {
+            let mut c = tinted.clone(); c.extend(op(0x66, label)); c.extend(op(0x2c, abc.strings.len() as u32));
+            c.extend(jump(0x14, code.len())); // ifne
+            c.extend(code);
+            c
+        };
+        let mut seek = tinted.clone(); seek.extend(&tinted); seek.extend(op(0x66, total)); seek.extend(op(0x4f, goto)); seek.push(0x01);
+        render = [seek, has_frame(&render)].concat();
+        untint = has_frame(&untint);
+    }
     let mut row = vec![0xd0]; row.extend(prop("tagame.controls:PlayerAvatar.m_playerInfoRow")?);
     let mut ident = vec![0xd0]; ident.extend(prop("tagame.controls:PlayerAvatar.m_playerId")?);
     // With a player id only the id decides; bLocalPlayer is a fallback for rows without one.
@@ -646,6 +693,31 @@ fn patch_avatar(data: &[u8]) -> R<(Vec<u8>, Vec<String>)> {
             let tcode = [&tbody.code[..tbody.code.len() - 1], &local_only(&[&untint[..], &[0x47]].concat())?[..], &[0x47]].concat();
             edits.push(body_edit(&abc, t, &tcode)?);
             changed.insert(t, tcode);
+        }
+    }
+    // The "Joining/Ready" list tweens the icon sprite's colour; with the photo shown, tween the hidden loader instead.
+    let waiting: Vec<u32> = abc.class("tagame.hud.WaitingForPlayerRenderer").into_iter().flat_map(|c| c.traits.iter())
+        .filter(|t| t.kind == 1 && t.name.ends_with(".setConnectionStatus")).filter_map(|t| t.method).collect();
+    if let [w] = waiting[..] {
+        let wbody = abc.body(w).ok_or("Método sin cuerpo.")?;
+        let tinted_ref = abc.reference("tintedAvatarIcons")?;
+        let mut swap = vec![0x2a]; // dup
+        swap.extend(op(0x66, tinted_ref));
+        swap.extend(op(0x66, abc.reference("currentLabel")?));
+        swap.extend(op(0x2c, abc.strings.len() as u32));
+        let photo = op(0x66, abc.reference("avatarIconLoader")?);
+        let original = op(0x66, tinted_ref);
+        swap.extend(jump(0x14, photo.len() + 4)); // ifne: not the photo frame
+        swap.extend(&photo);
+        swap.extend(jump(0x10, original.len()));
+        swap.extend(&original);
+        let wcode = replace_instructions(&wbody.code, |code, (s, e, _, _)| (code[*s] == 0x66 && code[*s..*e] == original[..]).then(|| swap.clone()))?;
+        if wbody.exceptions == 0 && wcode != wbody.code {
+            edits.push(body_edit(&abc, w, &wcode)?);
+            let mut r = Reader { data: &abc.data, pos: wbody.stackpos };
+            r.u30()?;
+            edits.push((wbody.stackpos, r.pos, encode_u30(wbody.stack + 2)));
+            changed.insert(w, wcode);
         }
     }
     edits.push(count_edit(&abc, 1)?);
@@ -817,5 +889,66 @@ mod parity {
         }
         println!("{} paquetes comparados", expected["packages"].as_array().unwrap().len());
         assert!(failures.is_empty(), "{}", failures.join("\n"));
+    }
+
+    /// Every branch of every method lands on an instruction.
+    fn branches_ok(code: &[u8]) -> bool {
+        let Ok(list) = crate::engine::hud::instructions(code) else { return false };
+        let starts: std::collections::HashSet<usize> = list.iter().map(|i| i.0).chain(Some(code.len())).collect();
+        let s24 = |b: &[u8]| i32::from_le_bytes([b[0], b[1], b[2], if b[2] & 0x80 != 0 { 0xff } else { 0 }]) as i64;
+        list.iter().all(|(s, e, op, _)| !(0x0c..=0x1a).contains(op) || starts.contains(&((*e as i64 + s24(&code[s + 1..s + 4])) as usize)))
+    }
+
+    /// Read only: SP_BACKUPS=<data\backups> SP_PICTURE=<png> cargo test -- --ignored real_avatar_patch_is_valid
+    #[test]
+    #[ignore]
+    fn real_avatar_patch_is_valid() {
+        let folder = std::path::PathBuf::from(std::env::var("SP_BACKUPS").unwrap());
+        let picture = std::fs::read(std::env::var("SP_PICTURE").unwrap()).unwrap();
+        let (mut checked, mut waiting, mut rewritten) = (0, 0, 0);
+        let mut original_bodies: HashMap<(String, usize, u32), Vec<u8>> = HashMap::new();
+        for entry in std::fs::read_dir(&folder).unwrap().flatten() {
+            let file = entry.file_name().to_string_lossy().to_string();
+            if !file.to_lowercase().starts_with("gfx") { continue; }
+            let pkg = Package::open(&entry.path()).unwrap();
+            for (x, e) in pkg.exports.iter().enumerate().filter(|e| pkg.class_name(e.1) == "SwfMovie") {
+                let (data, props) = export_properties(&pkg, pkg.flat().unwrap(), e);
+                let Some(rd) = props.iter().find(|p| p.name == "RawData" && p.kind == "ArrayProperty") else { continue };
+                let movie = &data[rd.value + 4..rd.value + rd.size];
+                let Ok((_, _, end, pos, _)) = abc_tag(movie) else { continue };
+                for (m, b) in &Abc::parse(&movie[pos..end]).unwrap().bodies { original_bodies.insert((file.clone(), x, *m), b.code.clone()); }
+            }
+            let Some((raw, _)) = patch_package(&pkg, "Prueba", &[], &Value::Null, Some(&picture), &Value::Null).unwrap_or_else(|e| panic!("{file}: {e}")) else { continue };
+            let done = Package::from_raw(&pkg.file, raw).unwrap();
+            let flat = done.flat().unwrap();
+            for (x, e) in done.exports.iter().enumerate().filter(|e| done.class_name(e.1) == "SwfMovie") {
+                let (data, props) = export_properties(&done, flat, e);
+                let Some(rd) = props.iter().find(|p| p.name == "RawData" && p.kind == "ArrayProperty") else { continue };
+                let movie = &data[rd.value + 4..rd.value + rd.size];
+                let Ok((_, _, end, pos, _)) = abc_tag(movie) else { continue };
+                let abc = Abc::parse(&movie[pos..end]).unwrap();
+                // Only the methods the patch rewrote (some untouched vanilla code has jumps this simple decoder can't follow).
+                for (m, b) in &abc.bodies {
+                    let original = original_bodies.get(&(file.clone(), x, *m));
+                    if original.is_some_and(|o| *o != b.code && branches_ok(o)) {
+                        if !branches_ok(&b.code) {
+                            let owner = abc.classes.iter().flat_map(|c| c.1.traits.iter().map(move |t| (c.0.clone(), t))).find(|(_, t)| t.method == Some(*m)).map(|(c, t)| format!("{c}::{}", t.name));
+                            for i in crate::engine::hud::instructions(&b.code).unwrap() { println!("{} {:02x} {:?} {:02x?}", i.0, i.2, i.3, &b.code[i.0..i.1]); }
+                            let o = original.unwrap();
+                            for i in crate::engine::hud::instructions(o).unwrap() { println!("ORIG {} {:02x} {:?} {:02x?}", i.0, i.2, i.3, &o[i.0..i.1]); }
+                            panic!("{file}: salto roto en {owner:?}");
+                        }
+                        rewritten += 1;
+                    }
+                }
+                if let Some(c) = abc.class("tagame.hud.WaitingForPlayerRenderer") {
+                    let m = c.traits.iter().find(|t| t.name.ends_with(".setConnectionStatus")).and_then(|t| t.method).unwrap();
+                    if abc.body(m).unwrap().code.iter().filter(|b| **b == 0x2a).count() >= 4 { waiting += 1; }
+                }
+                checked += 1;
+            }
+        }
+        println!("RESUMEN {checked} peliculas, {rewritten} metodos reescritos con saltos validos, lista de espera en {waiting}");
+        assert!(checked > 50 && waiting >= 1);
     }
 }

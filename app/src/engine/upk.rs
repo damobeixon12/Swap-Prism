@@ -231,7 +231,24 @@ fn keys_for(stem: &str) -> R<Vec<Vec<u8>>> {
 impl Package {
     pub fn open(file: &Path) -> R<Package> { Package::from_raw(file, std::fs::read(file).map_err(err)?) }
 
-    pub fn from_raw(file: &Path, raw: Vec<u8>) -> R<Package> {
+    /// Names, imports and exports only (reads just the header); `flat()` is not available on it.
+    pub fn open_header(file: &Path) -> R<Package> {
+        use std::io::Read;
+        let mut f = std::fs::File::open(file).map_err(err)?;
+        let mut raw = vec![0u8; 4096];
+        let n = f.read(&mut raw).map_err(err)?;
+        raw.truncate(n);
+        let size = parse_summary(&mut Reader { data: &raw, pos: 0 })?.total_header_size.max(0) as usize + 16;
+        if size > raw.len() {
+            f.by_ref().take((size - raw.len()) as u64).read_to_end(&mut raw).map_err(err)?;
+        }
+        Package::from_raw_sized(file, raw, f.metadata().map_err(err)?.len() as usize)
+    }
+
+    pub fn from_raw(file: &Path, raw: Vec<u8>) -> R<Package> { let len = raw.len(); Package::from_raw_sized(file, raw, len) }
+
+    /// `file_len`: size of the whole file when `raw` holds only its header.
+    fn from_raw_sized(file: &Path, raw: Vec<u8>, file_len: usize) -> R<Package> {
         let mut r = Reader { data: &raw, pos: 0 };
         let summary = parse_summary(&mut r)?;
         let meta_offset = r.pos;
@@ -272,7 +289,7 @@ impl Package {
             let pos = chunks_offset as usize + 4 + index * stride;
             let (uoff, usize_, coff, csize) = (i64_at(&header, pos), i32_at(&header, pos + 8), i64_at(&header, pos + 12), i32_at(&header, pos + 20));
             let chunk_nonce = (stride == 36).then(|| header[pos + 24..pos + 36].to_vec());
-            if uoff.min(usize_ as i64).min(coff).min(csize as i64) < 0 || coff + csize as i64 > raw.len() as i64 || uoff + usize_ as i64 > 512 * 1024 * 1024 { return Err("Chunk fuera de rango.".into()); }
+            if uoff.min(usize_ as i64).min(coff).min(csize as i64) < 0 || coff + csize as i64 > file_len as i64 || uoff + usize_ as i64 > 512 * 1024 * 1024 { return Err("Chunk fuera de rango.".into()); }
             chunks.push(Chunk { uoff, usize_, coff, csize, nonce: chunk_nonce });
         }
         let mut reader = Reader { data: &header, pos: 0 };

@@ -22,17 +22,19 @@ impl App {
                 let chip=egui::Rect::from_min_size(egui::pos2(field.rect.right()-52.,field.rect.center().y-10.),Vec2::new(44.,20.));
                 if self.navigation_search.is_empty(){ui.painter().rect_stroke(chip,5,egui::Stroke::new(1_f32,d::LINE()),egui::StrokeKind::Inside);ui.painter().text(chip.center(),egui::Align2::CENTER_CENTER,"Ctrl K",egui::FontId::proportional(11.),d::MUTED());}
                 ui.add_space(18.);
-                egui::ScrollArea::vertical().id_salt("sidebar-nav").max_height((ui.available_height()-70.).max(150.)).show(ui,|ui|self.navigation(ui));
+                egui::ScrollArea::vertical().id_salt("sidebar-nav").max_height((ui.available_height()-104.).max(150.)).show(ui,|ui|self.navigation(ui));
                 ui.with_layout(egui::Layout::bottom_up(egui::Align::LEFT),|ui|{
                     ui.horizontal(|ui|{ui.label(RichText::new(format!("v{VERSION}")).size(12.5).color(d::MUTED()));ui.with_layout(egui::Layout::right_to_left(egui::Align::Center),|ui|ui.label(RichText::new("F8 · Mostrar / ocultar").size(12.5).color(d::MUTED())));});
                     ui.horizontal(|ui|{
                         // Discord: brand-coloured mark + label, opens the server invite.
-                        let(mark,_)=ui.allocate_exact_size(Vec2::new(22.,18.),egui::Sense::hover());discord_mark(ui.painter(),mark);
+                        let mark=ui.add(egui::Image::new(egui::include_image!("../assets/discord.png")).fit_to_exact_size(Vec2::splat(20.))).rect;
                         let link=ui.add(egui::Label::new(RichText::new("Discord").size(13.).color(d::TEXT())).sense(egui::Sense::click()));
                         if ui.interact(mark.union(link.rect),egui::Id::new("discord-link"),egui::Sense::click()).on_hover_cursor(egui::CursorIcon::PointingHand).on_hover_text("Únete al Discord de Swap Prism").clicked()||link.clicked(){ctx.open_url(egui::OpenUrl::new_tab(DISCORD));}
                         ui.add_space(10.);
                         if ui.add_enabled(!self.busy,egui::Label::new(RichText::new("Salir").size(12.5).color(d::MUTED())).sense(egui::Sense::click())).on_hover_cursor(egui::CursorIcon::PointingHand).clicked(){ctx.send_viewport_cmd(egui::ViewportCommand::Close);}
                     });
+                    // Keeps the Discord row clear of the last navigation entry.
+                    ui.add_space(10.);ui.separator();ui.add_space(4.);
                 });
             });
         ctx.layer_painter(egui::LayerId::new(egui::Order::Foreground,egui::Id::new("sidebar-edge"))).vline(side.response.rect.right(),side.response.rect.y_range(),egui::Stroke::new(1_f32,d::LINE()));
@@ -785,15 +787,6 @@ fn pill(ui:&mut egui::Ui,rect:egui::Rect,text:&str,font:egui::FontId,fill:Color3
 }
 
 const DISCORD:&str="https://discord.gg/wdZZGsGfq";
-
-/// Simple Discord-style controller face in the brand blurple, drawn with shapes (no bundled logo file).
-fn discord_mark(painter:&egui::Painter,rect:egui::Rect){
-    let c=rect.center();let blurple=Color32::from_rgb(88,101,242);
-    let body=egui::Rect::from_center_size(c,Vec2::new(19.,14.));
-    painter.rect_filled(body,7.,blurple);
-    painter.circle_filled(c+Vec2::new(-6.,6.),3.5,blurple);painter.circle_filled(c+Vec2::new(6.,6.),3.5,blurple);
-    painter.circle_filled(c+Vec2::new(-3.6,0.),2.,Color32::WHITE);painter.circle_filled(c+Vec2::new(3.6,0.),2.,Color32::WHITE);
-}
 
 /// Vertical colour ramp over a rectangle.
 fn gradient(painter:&egui::Painter,rect:egui::Rect,top:Color32,bottom:Color32){

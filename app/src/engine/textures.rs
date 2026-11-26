@@ -55,13 +55,11 @@ pub fn inline_serial(pkg: &Package, data: &[u8], raw: &[u8], fit: bool) -> R<Vec
     let fmt = props.iter().find(|p| p.name == "Format" && p.size == 8).map(|p| name_of(pkg, data, p)).unwrap_or_default();
     if !["PF_DXT1", "PF_DXT5", "PF_A8R8G8B8"].contains(&fmt.as_str()) { return Err(format!("Formato de textura no admitido: {fmt}")); }
     let none = name_index(pkg, "None").ok_or("Falta el terminador del paquete.")?;
-    let image = dxt::load(raw)?;
     // Preserve existing dimensions/aspect and pixel format, including normal-map encoding.
     let sx = props.iter().find(|p| p.name == "SizeX").map(|p| i32_at(data, p.value)).unwrap_or(levels[0].3);
     let sy = props.iter().find(|p| p.name == "SizeY").map(|p| i32_at(data, p.value)).unwrap_or(levels[0].4);
     if !(1..=4096).contains(&sx) || !(1..=4096).contains(&sy) { return Err("Resolución no admitida.".into()); }
     let (sx, sy) = (sx as u32, sy as u32);
-    let base = if fit { dxt::fit(&image, sx, sy) } else { dxt::resize(&image, sx, sy) };
     let mut header = data[..start].to_vec();
     let mut previous = start;
     let mut never = false;
@@ -83,6 +81,21 @@ pub fn inline_serial(pkg: &Package, data: &[u8], raw: &[u8], fit: bool) -> R<Vec
     header.extend(0i32.to_le_bytes());
     header.extend(&data[end..off]);
     let no_mips = props.iter().any(|p| p.name == "MipGenSettings" && p.size == 8 && name_of(pkg, data, p) == "TMGS_NoMipmaps");
+    let mut out = header;
+    out.extend(encoded_mips(raw, sx, sy, &fmt, fit, no_mips)?.as_slice());
+    out.extend(&data[tail..]);
+    Ok(out)
+}
+
+/// The mip chain of an image, cached: the same pack goes into many packages (the ball into ~70).
+fn encoded_mips(raw: &[u8], sx: u32, sy: u32, fmt: &str, fit: bool, no_mips: bool) -> R<std::sync::Arc<Vec<u8>>> {
+    use sha2::Digest;
+    type Key = ([u8; 32], u32, u32, String, bool, bool);
+    static CACHE: std::sync::Mutex<Vec<(Key, std::sync::Arc<Vec<u8>>)>> = std::sync::Mutex::new(Vec::new());
+    let key: Key = (sha2::Sha256::digest(raw).into(), sx, sy, fmt.to_owned(), fit, no_mips);
+    if let Some(hit) = CACHE.lock().unwrap().iter().find(|e| e.0 == key) { return Ok(hit.1.clone()); }
+    let image = dxt::load(raw)?;
+    let base = if fit { dxt::fit(&image, sx, sy) } else { dxt::resize(&image, sx, sy) };
     let mut chunks: Vec<Vec<u8>> = Vec::new();
     let (mut w, mut h) = (sx, sy);
     loop {
@@ -104,10 +117,13 @@ pub fn inline_serial(pkg: &Package, data: &[u8], raw: &[u8], fit: bool) -> R<Vec
         w = (w / 2).max(1);
         h = (h / 2).max(1);
     }
-    let mut out = header;
-    out.extend((chunks.len() as i32).to_le_bytes());
+    let mut out = (chunks.len() as i32).to_le_bytes().to_vec();
     for c in chunks { out.extend(c); }
-    out.extend(&data[tail..]);
+    let out = std::sync::Arc::new(out);
+    let mut cache = CACHE.lock().unwrap();
+    // shortcut: keeps the last 8 encodings in memory (a few MB each), enough for one apply.
+    if cache.len() >= 8 { cache.remove(0); }
+    cache.push((key, out.clone()));
     Ok(out)
 }
 
