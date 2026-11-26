@@ -89,9 +89,11 @@ pub fn transparent_overlay(title:&str,editing:bool) {
         let mut desired=(style|WS_EX_LAYERED as isize|WS_EX_TOOLWINDOW as isize)&!(WS_EX_APPWINDOW as isize);
         if editing{desired&=!(WS_EX_NOACTIVATE as isize);}else{desired|=WS_EX_NOACTIVATE as isize;}
         if style!=desired{SetWindowLongPtrW(window,GWL_EXSTYLE,desired);}
-        static CONFIGURED:std::sync::Mutex<Vec<isize>>=std::sync::Mutex::new(Vec::new());
-        let mut done=CONFIGURED.lock().unwrap();
-        if !done.contains(&(window as isize)){done.push(window as isize);SetLayeredWindowAttributes(window,0,255,LWA_COLORKEY);}
+        // Checked on the window itself: a closed overlay's handle value gets reused by the next one, which then stayed
+        // opaque (a black screen) when this was remembered per handle.
+        let (mut key,mut alpha,mut flags)=(0u32,0u8,0u32);
+        let keyed=GetLayeredWindowAttributes(window,&mut key,&mut alpha,&mut flags)!=0&&flags&LWA_COLORKEY!=0&&key==0;
+        if !keyed{SetLayeredWindowAttributes(window,0,255,LWA_COLORKEY);}
     }
 }
 /// Own top-level window that is never minimized: a web view inside keeps rendering while the app is minimized.
