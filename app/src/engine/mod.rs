@@ -2,7 +2,9 @@
 //! still goes to the Python engine (_engine/SWAPPRISMEngine.exe) through the same JSON protocol.
 pub mod aes;
 pub mod game_settings;
+pub mod launcher;
 pub mod save;
+pub mod util;
 
 use serde_json::Value;
 use std::path::Path;
@@ -13,6 +15,7 @@ pub fn handle(root: &Path, request: &Value) -> Option<Result<Value, String>> {
     Some(match request["action"].as_str()? {
         "game_settings" => game_settings::read(None),
         "game_settings_write" => game_settings::write(root, &request["changes"], None),
+        action if action.starts_with("launcher_") => launcher::handle(root, action, request),
         _ => return None,
     })
 }

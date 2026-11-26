@@ -3668,8 +3668,10 @@ dependencies = [
 name = "swapprism"
 version = "0.31.6"
 dependencies = [
+ "crc32fast",
  "eframe",
  "egui_extras",
+ "flate2",
  "image",
  "native-tls",
  "rfd",

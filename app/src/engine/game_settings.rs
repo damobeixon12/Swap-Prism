@@ -258,13 +258,6 @@ pub fn read(base: Option<&Path>) -> R<Value> {
     Ok(json!({"values": values, "skills": skills, "save": file.display().to_string(), "scoreboard_keys": bindings(&save.data, "ToggleScoreboard")}))
 }
 
-fn stamp() -> String {
-    let mut t = unsafe { std::mem::zeroed() };
-    unsafe { windows_sys::Win32::System::SystemInformation::GetLocalTime(&mut t) };
-    let t: windows_sys::Win32::Foundation::SYSTEMTIME = t;
-    format!("{:04}{:02}{:02}-{:02}{:02}{:02}", t.wYear, t.wMonth, t.wDay, t.wHour, t.wMinute, t.wSecond)
-}
-
 pub fn write(root: &Path, changes: &Value, base: Option<&Path>) -> R<Value> {
     super::require_closed()?;
     let changes = changes.as_object().ok_or("Ajustes no válidos.")?;
@@ -274,7 +267,7 @@ pub fn write(root: &Path, changes: &Value, base: Option<&Path>) -> R<Value> {
     let base = base.map(Path::to_path_buf).unwrap_or_else(folder);
     let files = saves(&base);
     if files.is_empty() { return Err("No se encuentra la partida guardada de Rocket League.".into()); }
-    let backup = root.join("data").join("settings_backups").join(stamp());
+    let backup = root.join("data").join("settings_backups").join(super::util::stamp());
     std::fs::create_dir_all(&backup).map_err(|e| e.to_string())?;
     let save_changes: Vec<(&String, &Value)> = changes.iter().filter(|(k, _)| field(k).is_some()).collect();
     for path in &files {
