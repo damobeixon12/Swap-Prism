@@ -8,6 +8,7 @@ pub mod profile;
 pub mod save;
 pub mod state;
 pub mod studio;
+pub mod upk;
 pub mod util;
 pub mod workshop;
 pub mod zip;
