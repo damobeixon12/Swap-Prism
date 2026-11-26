@@ -73,6 +73,23 @@ pub fn dumps(value: &serde_json::Value, ascii: bool) -> String {
     out
 }
 
+/// json.dumps(value, ensure_ascii=False) on one line: ", " and ": " separators.
+pub fn dumps_compact(value: &serde_json::Value) -> String {
+    use serde_json::Value;
+    match value {
+        Value::Array(items) => format!("[{}]", items.iter().map(dumps_compact).collect::<Vec<_>>().join(", ")),
+        Value::Object(map) => format!("{{{}}}", map.iter().map(|(k, v)| format!("{}: {}", serde_json::to_string(k).unwrap_or_default(), dumps_compact(v))).collect::<Vec<_>>().join(", ")),
+        other => serde_json::to_string(other).unwrap_or_default(),
+    }
+}
+
+/// A random 32-hex-digit name (uuid4().hex) from the OS generator.
+pub fn uuid_hex() -> String {
+    let mut bytes = [0u8; 16];
+    unsafe { windows_sys::Win32::Security::Cryptography::BCryptGenRandom(std::ptr::null_mut(), bytes.as_mut_ptr(), 16, windows_sys::Win32::Security::Cryptography::BCRYPT_USE_SYSTEM_PREFERRED_RNG) };
+    bytes.iter().map(|b| format!("{b:02x}")).collect()
+}
+
 /// Text written the way Python's text mode does on Windows (CRLF line breaks, UTF-8).
 pub fn write_text(path: &Path, text: &str) -> R<()> { std::fs::write(path, text.replace('\n', "\r\n")).map_err(err) }
 

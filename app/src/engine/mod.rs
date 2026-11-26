@@ -7,6 +7,7 @@ pub mod dxt;
 pub mod epic;
 pub mod game_settings;
 pub mod launcher;
+pub mod library;
 pub mod profile;
 pub mod save;
 pub mod state;
@@ -35,6 +36,10 @@ pub fn handle(root: &Path, request: &Value, progress: &dyn Fn(Value)) -> Option<
         "open_epic" => util::shell_open("com.epicgames.launcher://store/library").map(|_| serde_json::json!({"opened": true})),
         "verify_files" => verify_files(root, request),
         "restore" => restore(root, request),
+        "import" => {
+            let (found, errors) = library::scan(Path::new(request["path"].as_str().unwrap_or("")));
+            library::save_library(&root.join("data").join("texture_library"), &found).and_then(|_| library::packs(root)).map(|packs| serde_json::json!({"packs": packs, "errors": errors}))
+        }
         _ => return None,
     })
 }

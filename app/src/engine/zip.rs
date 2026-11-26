@@ -62,6 +62,14 @@ pub fn members(path: &Path) -> R<Vec<Member>> {
     Ok(out)
 }
 
+/// One member's bytes in memory (small files), checked like extract().
+pub fn read(path: &Path, member: &Member) -> R<Vec<u8>> {
+    let tmp = std::env::temp_dir().join(format!("sp-zip-{}", super::util::uuid_hex()));
+    let result = extract(path, member, &tmp).and_then(|_| std::fs::read(&tmp).map_err(err));
+    let _ = std::fs::remove_file(&tmp);
+    result
+}
+
 /// Extract one member to a file, checking its size and CRC.
 pub fn extract(path: &Path, member: &Member, dest: &Path) -> R<()> {
     let mut file = std::fs::File::open(path).map_err(err)?;
