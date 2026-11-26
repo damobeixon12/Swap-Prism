@@ -39,3 +39,13 @@ pub fn after_restore(root: &Path, names: Option<&[String]>) -> R<Value> {
     util::write_text(&root.join("data").join("studio.json"), &util::dumps(&settings, true))?;
     Ok(settings)
 }
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn manifest_parses() {
+        let parsed: Result<serde_json::Value, _> = serde_json::from_str(include_str!("../../assets/audio_manifest.json"));
+        assert!(parsed.is_ok(), "{:?}", parsed.err());
+        assert!(super::manifest()["post"]["bank"].is_string());
+    }
+}

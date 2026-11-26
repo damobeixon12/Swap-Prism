@@ -8,6 +8,7 @@ pub mod dxt;
 pub mod epic;
 pub mod game_settings;
 pub mod hud;
+pub mod inventory;
 pub mod jobs;
 pub mod launcher;
 pub mod library;
@@ -35,6 +36,7 @@ pub fn handle(root: &Path, request: &Value, progress: &dyn Fn(Value)) -> Option<
         "workshop_download" => workshop::download(root, request["key"].as_str().unwrap_or(""), progress),
         "workshop_import" => workshop::import_map(root, Path::new(request["path"].as_str().unwrap_or("")), None),
         "workshop_remove" => workshop::remove(root, request["key"].as_str().unwrap_or("")),
+        "bootstrap" => bootstrap(root),
         "refresh_state" => state::inspect_state(&root.join("data")).map(|s| serde_json::json!({"state": s})),
         "open_epic" => util::shell_open("com.epicgames.launcher://store/library").map(|_| serde_json::json!({"opened": true})),
         "verify_files" => verify_files(root, request),
@@ -71,6 +73,33 @@ fn restore(root: &Path, request: &Value) -> Result<Value, String> {
     let count = state::restore_all(&folder, names.as_deref())?;
     profile::after_restore(root, names.as_deref())?;
     Ok(serde_json::json!({"count": count, "state": state::load_state(&folder)?, "profile": profile::load(root)?, "studio": studio::after_restore(root, names.as_deref())?}))
+}
+
+/// Everything the interface needs at start: saved inventory, packs, sounds, change state, profile and studio.
+fn bootstrap(root: &Path) -> Result<Value, String> {
+    let mut errors = Vec::new();
+    let snapshot = match inventory::load_snapshot(jobs::database()) {
+        Ok(mut snap) => {
+            let source = std::path::PathBuf::from(snap["source"].as_str().unwrap_or(""));
+            snap["player_name"] = inventory::player_name(&source).into();
+            let selected = snap["account_equipped"].as_array().into_iter().flatten().find(|r| r["Slot"] == "Player Title").and_then(|r| r["Product"].as_str()).unwrap_or("").to_owned();
+            let mut ids: Vec<String> = snap["inventory"].as_array().into_iter().flatten()
+                .filter(|r| r["blueprint"] != true).filter_map(|r| r["title_id"].as_str().filter(|t| !t.is_empty()).map(str::to_owned)).collect();
+            if !selected.is_empty() { ids.push(selected.clone()); }
+            ids.sort();
+            ids.dedup();
+            snap["titles"] = ids.into_iter().map(|k| serde_json::json!({"equipped": k == selected, "id": k})).collect::<Vec<_>>().into();
+            snap
+        }
+        Err(e) => { errors.push(e); serde_json::json!({"inventory": [], "active": null}) }
+    };
+    let sounds: Vec<Value> = std::fs::read_dir(root.join("data").join("sounds")).into_iter().flatten().flatten().map(|e| e.path())
+        .filter(|p| p.extension().is_some_and(|x| x == "json"))
+        .filter_map(|p| serde_json::from_slice::<Value>(&std::fs::read(p).ok()?).ok())
+        .filter(|item| (item["kind"] == "post" || item["kind"] == "reset") && item["path"].as_str().is_some_and(|p| Path::new(p).is_file())).collect();
+    Ok(serde_json::json!({"snapshot": snapshot, "packs": library::packs(root)?, "sounds": sounds, "state": state::inspect_state(&root.join("data"))?,
+        "colors": colors::PAINTS.iter().map(|p| p.0).collect::<Vec<_>>(), "errors": errors, "profile": profile::load(root)?, "profile_codec": profile::CODEC_REVISION,
+        "studio": studio::load(root)?, "audio_limits": studio::manifest()}))
 }
 
 pub const METER_COMPANIONS: [&str; 3] = ["GFxShell_SF.upk", "GFx_ReplayHud_SF.upk", "GFX_SpectatorHud_SF.upk"];
