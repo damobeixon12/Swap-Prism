@@ -72,7 +72,7 @@ fn replace_instructions(code: &[u8], pick: impl Fn(&[u8], &(usize, usize, u8, Ve
 }
 
 /// Diagnostic logging of what each avatar receives (Launch.log, category SwapPrism). Off for releases.
-const AVATAR_LOG: bool = true;
+const AVATAR_LOG: bool = false;
 
 /// Raises a method's max_stack by `extra`.
 fn stack_edit(abc: &Abc, mid: u32, extra: u32) -> R<(usize, usize, Vec<u8>)> {
@@ -837,11 +837,10 @@ pub fn patch_package(pkg: &Package, name: &str, images: &[(String, Vec<u8>)], ti
     let mut replacements: BTreeMap<usize, Vec<u8>> = BTreeMap::new();
     let mut movies = BTreeSet::new();
     let (mut fields, mut paths, mut features) = (Vec::new(), Vec::new(), BTreeSet::new());
-    let mut avatar = avatar.or(images.iter().find(|i| i.0 == "avatar").map(|i| i.1.as_slice()));
-    // The goal replay HUD never gets the photo frame. The diagnostic build still gives it the (guarded, native-looking)
-    // avatar code so its avatars log what they receive.
+    let avatar = avatar.or(images.iter().find(|i| i.0 == "avatar").map(|i| i.1.as_slice()));
+    // The goal replay HUD gets the avatar code without the photo frame: with the frame guard its avatars stay native.
+    // Leaving it unpatched showed some players' avatars black in the replay (confirmed in game, 26/11/2026).
     let replay = pkg.file.file_name().is_some_and(|f| f.to_string_lossy().to_lowercase() == "gfx_replayhud_sf.upk");
-    if replay && !AVATAR_LOG { avatar = None; }
     let titled = !title.is_null() && !title.as_object().is_some_and(|m| m.is_empty());
     let ranked = !rank.is_null() && !rank.as_object().is_some_and(|m| m.is_empty());
     if !name.is_empty() || titled || avatar.is_some() || ranked {

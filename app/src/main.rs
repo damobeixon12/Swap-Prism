@@ -101,6 +101,8 @@ struct App {
     /// Last catalog_check: installed version, game object count and the objects added without an official name.
     catalog_info: Value,
     catalog_checking: bool,
+    /// Ball pack to queue again once the packs are known (it misses packages added by a newer version).
+    ball_requeue: Option<String>,
     snapshot: Value,
     packs: Vec<Value>,
     state: Value,
@@ -236,6 +238,7 @@ impl App {
             rows,
             catalog_info: Value::Null,
             catalog_checking: false,
+            ball_requeue: None,
             snapshot: json!({}),
             packs: vec![],
             state: read_json(&root.join("data/swaps.json")),
@@ -409,6 +412,16 @@ impl App {
             let _ = tx.send(Event::Catalog(worker(&root, &json!({"action": "catalog_check", "game": game, "version": version, "force": force}))));
         });
     }
+    /// Queues the installed ball again so a newer version covers every package that carries it.
+    fn requeue_ball(&mut self) {
+        let Some(name) = self.ball_requeue.clone() else { return };
+        let Some(pack) = self.packs.iter().find(|p| s(p, "category") == "Pelota" && s(p, "name") == name).cloned() else { return };
+        self.ball_requeue = None;
+        if self.plans.contains_key("GameInfo_Soccar_SF.upk") { return; }
+        self.queue_plan("GameInfo_Soccar_SF.upk".into(), json!({"category": "Pelota", "kind": "texture", "digest": pack["digest"], "target_id": Value::Null, "label": format!("Pelota · {name}")}));
+        self.save_queue();
+        self.status = "La pelota se volverá a aplicar para que se vea en todos los mapas. Pulsa Aplicar con el juego cerrado.".into();
+    }
     fn queue_plan(&mut self,key:String,plan:Value){
         let category=s(&plan,"category").to_owned();
         let rows=self.rows.clone();let packs=self.packs.clone();
@@ -520,6 +533,7 @@ impl App {
                                 }
                                 self.snapshot = v["snapshot"].clone();
                                 self.packs = v["packs"].as_array().cloned().unwrap_or_default();
+                                self.requeue_ball();
                                 self.audio_library=v["sounds"].as_array().cloned().unwrap_or_default();
                                 self.state = v["state"].clone();
                                 self.colors = v["colors"]
@@ -607,7 +621,9 @@ impl App {
                             // Bundled rows first, then the game's objects without an official name.
                             self.rows.retain(|r| r["Unofficial"] != true);
                             self.rows.extend(v["extra"].as_array().cloned().unwrap_or_default());
+                            self.ball_requeue = v["ball_incomplete"].as_str().map(str::to_owned);
                             self.catalog_info = v;
+                            self.requeue_ball();
                         }
                         Err(e) => self.catalog_info = json!({"error": e}),
                     }

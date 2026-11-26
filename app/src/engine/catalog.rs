@@ -116,7 +116,19 @@ pub fn check(root: &Path, game: &Path, version: &str, force: bool) -> R<Value> {
     };
     super::jobs::set_extra(result["extra"].as_array().cloned().unwrap_or_default());
     result["installed_version"] = version.into();
+    result["ball_incomplete"] = incomplete_ball(root, &cooked)?.map_or(Value::Null, Value::from);
     Ok(result)
+}
+
+/// The installed ball pack's name when some package carrying the ball still has the original
+/// (applied by a version that patched fewer packages: the game then shows the default ball).
+fn incomplete_ball(root: &Path, cooked: &Path) -> R<Option<String>> {
+    let data = root.join("data");
+    let state = super::state::load_state(&data)?;
+    let Some(main) = state.get("GameInfo_Soccar_SF.upk").filter(|e| e["status"] == "installed" && e["target_item"]["Product"] == "Pelota") else { return Ok(None) };
+    let installed = |name: &str| state.get(name).is_some_and(|e| e["status"] == "installed");
+    let missing = super::ball_companions(cooked, &data)?.iter().any(|name| !installed(name));
+    Ok(missing.then(|| main["donor_item"]["Product"].as_str().unwrap_or("").to_owned()).filter(|n| !n.is_empty()))
 }
 
 /// The last check's rows, so applies in a new session already know them.
