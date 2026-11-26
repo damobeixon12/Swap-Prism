@@ -170,10 +170,18 @@ pub fn scoreboard_rows(rows: &[LobbyRow]) -> Vec<(&LobbyRow, f32)> {
 /// The window lives for the whole match and is only shown/hidden: creating it on each press flashed white (and black when closed).
 fn show_scoreboard(ctx: &egui::Context, board: Arc<Mutex<RankBoard>>) {
     let active = !board.lock().unwrap().lobby.is_empty() && platform::foreground_game();
+    // Diagnostic (black screen on the scoreboard): window state at every change of what is wanted.
+    static LAST: std::sync::Mutex<(bool, bool)> = std::sync::Mutex::new((false, false));
+    let note = |wanted: (bool, bool)| {
+        let mut last = LAST.lock().unwrap();
+        if *last != wanted { *last = wanted; platform::log_overlay(BOARD_TITLE, &format!("activo={} pulsado={}", wanted.0, wanted.1)); }
+    };
     let Some(bounds) = platform::game_bounds().filter(|_| active) else {
+        note((false, platform::scoreboard_held()));
         platform::overlay_visibility(BOARD_TITLE, false);
         return;
     };
+    note((true, platform::scoreboard_held()));
     let scale = ctx.pixels_per_point();
     let builder = egui::ViewportBuilder::default()
         .with_title(BOARD_TITLE)
@@ -195,6 +203,8 @@ fn show_scoreboard(ctx: &egui::Context, board: Arc<Mutex<RankBoard>>) {
         platform::transparent_overlay(BOARD_TITLE, false);
         let show = !board.lock().unwrap().lobby.is_empty() && platform::scoreboard_held() && platform::foreground_game();
         platform::overlay_visibility(BOARD_TITLE, show);
+        static SHOWN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+        if SHOWN.swap(show, std::sync::atomic::Ordering::Relaxed) != show { platform::log_overlay(BOARD_TITLE, &format!("dibujado mostrar={show}")); }
         egui::CentralPanel::default().frame(egui::Frame::new().fill(Color32::TRANSPARENT)).show(ctx, |ui| {
             let area = ui.max_rect();
             let s = area.height() / 1080.;

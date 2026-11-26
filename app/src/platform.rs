@@ -96,6 +96,30 @@ pub fn transparent_overlay(title:&str,editing:bool) {
         if !keyed{SetLayeredWindowAttributes(window,0,255,LWA_COLORKEY);}
     }
 }
+/// Diagnostic: every top-level window with this title (handle, visible, extended style, colour key, position),
+/// appended to data/overlay-debug.log next to the executable with `event`.
+pub fn log_overlay(title:&str,event:&str){
+    use windows_sys::Win32::UI::WindowsAndMessaging::*;
+    use std::io::Write;
+    let wide:Vec<u16>=title.encode_utf16().chain([0]).collect();
+    let mut line=format!("{} {event}:",crate::engine::util::stamp());
+    unsafe{
+        let mut window=std::ptr::null_mut();
+        loop{
+            window=FindWindowExW(std::ptr::null_mut(),window,std::ptr::null(),wide.as_ptr());
+            if window.is_null(){break;}
+            let mut pid=0;GetWindowThreadProcessId(window,&mut pid);
+            if pid!=std::process::id(){continue;}
+            let (mut key,mut alpha,mut flags)=(0u32,0u8,0u32);
+            let keyed=GetLayeredWindowAttributes(window,&mut key,&mut alpha,&mut flags);
+            let mut r:windows_sys::Win32::Foundation::RECT=std::mem::zeroed();GetWindowRect(window,&mut r);
+            line+=&format!(" [hwnd={:x} visible={} exstyle={:x} layered_ok={keyed} key={key:x} alpha={alpha} flags={flags} rect={},{},{},{}]",
+                window as usize,IsWindowVisible(window)!=0,GetWindowLongPtrW(window,GWL_EXSTYLE),r.left,r.top,r.right,r.bottom);
+        }
+    }
+    let Some(dir)=std::env::current_exe().ok().and_then(|e|e.parent().map(|p|p.join("data")))else{return};
+    if let Ok(mut f)=fs::OpenOptions::new().create(true).append(true).open(dir.join("overlay-debug.log")){let _=writeln!(f,"{line}");}
+}
 /// Own top-level window that is never minimized: a web view inside keeps rendering while the app is minimized.
 pub fn offscreen_host()->isize{
     use windows_sys::Win32::UI::WindowsAndMessaging::*;
