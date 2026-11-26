@@ -9,10 +9,10 @@ set "RUSTUP_HOME=%TC%\rustup"
 set "CARGO_HOME=%TC%\cargo"
 set "RB=%TC%\rustup\toolchains\stable-x86_64-pc-windows-gnu\lib\rustlib\x86_64-pc-windows-gnu\bin"
 set "PATH=%TC%\cargo\bin;%RB%;%RB%\self-contained;%PATH%"
-for /d %%L in ("%TC%\llvm-mingw-*-ucrt-x86_64") do call set "PATH=%%L\bin;%%PATH%%"
 :build
 rem app\.cargo\config.toml (enlazador rust-lld) solo se aplica si cargo se ejecuta desde app\.
 cd /d "%ROOT%\app"
-cargo build --release --locked --bin swapprism-build
+rem --offline en vez de --locked: subir la versión en Cargo.toml solo cambia nuestra propia entrada de Cargo.lock.
+cargo build --release --offline --bin swapprism-build
 if errorlevel 1 exit /b 1
 "%ROOT%\app\target\release\swapprism-build.exe" %*

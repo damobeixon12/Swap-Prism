@@ -3,12 +3,12 @@
 App de Windows para personalizar Rocket League **en local**: skins, texturas, sonidos,
 perfil (nombre/avatar/títulos), fake rank, mapas de Workshop, overlay de FPS y pestaña de Tracker.
 Todo se hace editando los paquetes del juego (`.upk`, `.bnk`) con copia de seguridad y restauración byte a byte.
-Versión actual: **0.31.6** (`app/Cargo.toml`). Repo: https://github.com/damobeixon12/Swap-Prism
+Versión actual: **0.32.0** (`app/Cargo.toml`). Repo: https://github.com/damobeixon12/Swap-Prism
 (el código está en la rama main desde la 0.31.0).
 
 Creada originalmente con Codex. El 25/11/2026 se reorganizó entera (ver «Estado de la reorganización»).
 
-## Arquitectura (rama `rust-engine`: todo Rust)
+## Arquitectura (todo Rust)
 
 ```
 app/ (Rust, eframe/egui 0.31)
@@ -56,10 +56,10 @@ scripts\swapprism-build.cmd release            # lo que hace Preparar update.cmd
 - No publicar Releases ni hacer push sin que el usuario lo pida.
 - Pedir permiso antes de pasar a otra tarea grande; el usuario escribe en español.
 
-## Migración a Rust (26/11/2026, rama `rust-engine`, sin push)
+## Migración a Rust (26/11/2026)
 
-- Pasos 1–12 hechos: motor entero en Rust con paridad comprobada contra Python sobre copias; scripts en Rust; `engine/` borrada.
-- Falta: que el usuario pruebe en el juego el instalador de la rama. Hasta entonces `main` sigue siendo la versión publicada.
+- Hecha y publicada en 0.32.0: motor y scripts en Rust, `engine/` de Python borrada (sigue en la etiqueta `backup-antes-de-rust`).
+- `main` contiene ya la versión Rust (la rama `rust-engine` se unió a main).
 
 ## Pendiente de la app
 

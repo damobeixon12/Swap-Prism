@@ -1,6 +1,6 @@
 [package]
 name = "swapprism"
-version = "0.31.6"
+version = "0.32.0"
 edition = "2021"
 
 [[bin]]
