@@ -60,23 +60,67 @@ pub fn replace_file(path: &Path, data: &[u8]) -> R<()> {
     std::fs::rename(&tmp, path).map_err(err)
 }
 
-pub fn sha256_file(path: &Path) -> R<String> {
-    use sha2::{Digest, Sha256};
-    use std::io::Read;
-    let mut file = std::fs::File::open(path).map_err(err)?;
-    let mut hash = Sha256::new();
-    let mut buf = vec![0u8; 1 << 20];
-    loop {
-        let n = file.read(&mut buf).map_err(err)?;
-        if n == 0 { break; }
-        hash.update(&buf[..n]);
+/// json.dumps(value, indent=2, ensure_ascii=ascii): same layout as the Python engine wrote.
+pub fn dumps(value: &serde_json::Value, ascii: bool) -> String {
+    let text = serde_json::to_string_pretty(value).unwrap_or_default();
+    if !ascii { return text; }
+    let mut out = String::with_capacity(text.len());
+    for c in text.chars() {
+        if c.is_ascii() { out.push(c); continue; }
+        let mut units = [0u16; 2];
+        for u in c.encode_utf16(&mut units) { out.push_str(&format!("\\u{u:04x}")); }
     }
-    Ok(format!("{:x}", hash.finalize()))
+    out
 }
+
+/// Text written the way Python's text mode does on Windows (CRLF line breaks, UTF-8).
+pub fn write_text(path: &Path, text: &str) -> R<()> { std::fs::write(path, text.replace('\n', "\r\n")).map_err(err) }
+
+/// File hash through Windows CNG (hardware SHA extensions, like Python's OpenSSL-backed hashlib).
+pub fn hash_file(path: &Path, algorithm: &str) -> R<String> {
+    use std::io::Read;
+    use windows_sys::Win32::Security::Cryptography::*;
+    let mut file = std::fs::File::open(path).map_err(err)?;
+    let alg_name: Vec<u16> = algorithm.encode_utf16().chain([0]).collect();
+    unsafe {
+        let mut alg: BCRYPT_ALG_HANDLE = std::ptr::null_mut();
+        if BCryptOpenAlgorithmProvider(&mut alg, alg_name.as_ptr(), std::ptr::null(), 0) != 0 { return Err(format!("{algorithm} no disponible.")); }
+        let result = (|| {
+            let mut hash: BCRYPT_HASH_HANDLE = std::ptr::null_mut();
+            if BCryptCreateHash(alg, &mut hash, std::ptr::null_mut(), 0, std::ptr::null(), 0, 0) != 0 { return Err(format!("{algorithm} no disponible.")); }
+            let mut buf = vec![0u8; 1 << 20];
+            let digest = (|| {
+                loop {
+                    let n = file.read(&mut buf).map_err(err)?;
+                    if n == 0 { break; }
+                    if BCryptHashData(hash, buf.as_ptr(), n as u32, 0) != 0 { return Err("Error al calcular el hash.".to_string()); }
+                }
+                let size = if algorithm == "SHA1" { 20 } else { 32 };
+                let mut out = vec![0u8; size];
+                if BCryptFinishHash(hash, out.as_mut_ptr(), size as u32, 0) != 0 { return Err("Error al calcular el hash.".to_string()); }
+                Ok(out.iter().map(|b| format!("{b:02x}")).collect())
+            })();
+            BCryptDestroyHash(hash);
+            digest
+        })();
+        BCryptCloseAlgorithmProvider(alg, 0);
+        result
+    }
+}
+
+pub fn sha256_file(path: &Path) -> R<String> { hash_file(path, "SHA256") }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn file_hashes_match_known_values() {
+        let path = std::env::temp_dir().join(format!("sp-hash-{}", std::process::id()));
+        std::fs::write(&path, b"abc").unwrap();
+        assert_eq!(sha256_file(&path).unwrap(), "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
+        assert_eq!(hash_file(&path, "SHA1").unwrap(), "a9993e364706816aba3e25717850c26c9cd0d89d");
+        let _ = std::fs::remove_file(path);
+    }
     #[test]
     fn quote_matches_python() {
         assert_eq!(quote("0a4d:Sugar b/ñ"), "0a4d%3ASugar%20b%2F%C3%B1");
