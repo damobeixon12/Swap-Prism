@@ -743,7 +743,9 @@ pub fn patch_package(pkg: &Package, name: &str, images: &[(String, Vec<u8>)], ti
     }
     for (key, raw) in images {
         if key == "avatar" { continue; } // Embedded local frame; never replace the shared fallback.
-        let found: Vec<usize> = if key == "banner" && is_banner_item(pkg) {
+        let startup = pkg.file.file_name().is_some_and(|f| f.to_string_lossy().to_lowercase() == "startup.upk");
+        // Startup also holds a banner product asset: there the shared default banner is the target, not its largest texture.
+        let found: Vec<usize> = if key == "banner" && is_banner_item(pkg) && !startup {
             // The equipped banner item shows its own artwork: replace its main texture.
             let art: Vec<usize> = (0..pkg.exports.len()).filter(|&i| pkg.class_name(&pkg.exports[i]) == "Texture2D" && pkg.path(i).is_ok_and(|p| !p.rsplit('.').next().unwrap_or("").starts_with("Thumb_"))).collect();
             if art.is_empty() { return Err("El banner equipado no tiene una textura reconocible.".into()); }

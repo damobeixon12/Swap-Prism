@@ -41,6 +41,11 @@ pub fn handle(root: &Path, request: &Value, progress: &dyn Fn(Value)) -> Option<
         "open_epic" => util::shell_open("com.epicgames.launcher://store/library").map(|_| serde_json::json!({"opened": true})),
         "verify_files" => verify_files(root, request),
         "restore" => restore(root, request),
+        "profile_import" => {
+            let kind = request["kind"].as_str().unwrap_or("");
+            profile::import_image(root, Path::new(request["path"].as_str().unwrap_or("")), kind).map(|path| serde_json::json!({"path": path, "kind": kind}))
+        }
+        "profile_apply" => game(request).and_then(|g| profile::apply(root, &g, &request["settings"], progress)),
         "import" => {
             let (found, errors) = library::scan(Path::new(request["path"].as_str().unwrap_or("")));
             library::save_library(&root.join("data").join("texture_library"), &found).and_then(|_| library::packs(root)).map(|packs| serde_json::json!({"packs": packs, "errors": errors}))
@@ -113,6 +118,13 @@ pub fn ball_companions() -> Vec<String> {
     let mut out: Vec<String> = modes.iter().map(|m| format!("GameInfo_{m}_SF.upk")).collect();
     out.push("Gameinfo_Hockey_SF.upk".into());
     out
+}
+
+/// The game folder of a request, checked to be a Rocket League installation.
+fn game(request: &Value) -> Result<std::path::PathBuf, String> {
+    let game = util::resolve(Path::new(request["game"].as_str().unwrap_or("")));
+    if !game.join("TAGame").join("CookedPCConsole").is_dir() || !game.join("Binaries").join("Win64").join("RocketLeague.exe").is_file() { return Err("Selecciona la instalación de Rocket League.".into()); }
+    Ok(game)
 }
 
 /// Package and save writes only with the game closed.

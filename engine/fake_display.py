@@ -174,7 +174,8 @@ def patch_package(pkg,name='',images=None,title=None,avatar=None,rank=None):
     allowed={'avatar':'gfx_shared.Icon_AvatarDefault','banner':'gfx_shared.PlayerBanner_Default'}
     for key,raw in (images or {}).items():
         if key=='avatar':continue # Embedded local frame; never replace the shared fallback.
-        if key=='banner' and is_banner_item(pkg):
+        # Startup also holds a banner product asset: there the shared default banner is the target, not its largest texture.
+        if key=='banner' and is_banner_item(pkg) and pkg.file.name.casefold()!='startup.upk':
             # The equipped banner item shows its own artwork, not the shared default: replace its main texture.
             art=[i for i,e in enumerate(pkg.exports) if pkg.class_name(e)=='Texture2D' and not pkg.path(i).rsplit('.',1)[-1].startswith('Thumb_')]
             if not art:raise ValueError('El banner equipado no tiene una textura reconocible.')
