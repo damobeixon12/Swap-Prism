@@ -45,6 +45,9 @@ pub fn handle(root: &Path, request: &Value, progress: &dyn Fn(Value)) -> Option<
             let kind = request["kind"].as_str().unwrap_or("");
             profile::import_image(root, Path::new(request["path"].as_str().unwrap_or("")), kind).map(|path| serde_json::json!({"path": path, "kind": kind}))
         }
+        "studio_apply" => game(request).and_then(|g| studio::apply(root, &g, &request["settings"], progress)),
+        "sound_import" => studio::import_mp3(root, Path::new(request["path"].as_str().unwrap_or("")), request["kind"].as_str().unwrap_or("")),
+        "sound_preview" => studio::preview(root, request),
         "profile_apply" => game(request).and_then(|g| profile::apply(root, &g, &request["settings"], progress)),
         "import" => {
             let (found, errors) = library::scan(Path::new(request["path"].as_str().unwrap_or("")));

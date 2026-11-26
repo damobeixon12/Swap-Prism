@@ -3670,6 +3670,7 @@ dependencies = [
 name = "swapprism"
 version = "0.31.6"
 dependencies = [
+ "ab_glyph",
  "crc32fast",
  "eframe",
  "egui_extras",
