@@ -89,26 +89,55 @@ impl App {
     }
 
     /// Opening animation (1.4 s): the logo rises out of a soft glow, the name is revealed left to right, then all fades.
+    /// Start-up animation (~2.3 s): the logo lands, a ring draws itself around it and pulses out, the name rises
+    /// letter by letter over a line that opens from the centre, then everything lifts and fades into the app.
     fn splash(&self,ctx:&egui::Context){
         let t=self.splash_at.elapsed().as_secs_f32();
-        if t>1.4||(self.shot.is_some()&&std::env::var_os("SP_SHOT_SPLASH").is_none())||self.design_dir.is_some(){return;}
+        const END:f32=2.3;
+        if t>END||(self.shot.is_some()&&std::env::var_os("SP_SHOT_SPLASH").is_none())||self.design_dir.is_some(){return;}
         ctx.request_repaint();
-        let screen=ctx.screen_rect();let out=1.-((t-1.1)/0.3).clamp(0.,1.);
+        let phase=|a:f32,b:f32|((t-a)/(b-a)).clamp(0.,1.);
+        let back=|x:f32|{let c=1.70158;1.+(c+1.)*(x-1.).powi(3)+c*(x-1.).powi(2)};
+        let screen=ctx.screen_rect();
+        let leave=ease(phase(1.95,END));let out=1.-leave;let lift=1.+0.06*leave;
         let painter=ctx.layer_painter(egui::LayerId::new(egui::Order::Tooltip,egui::Id::new("splash")));
         painter.rect_filled(screen,0,d::BACKGROUND().gamma_multiply(out));
-        let grow=ease(t/0.65);let center=screen.center()-Vec2::new(0.,26.);
-        painter.circle_filled(center,60.+50.*grow,d::GREEN().gamma_multiply(0.07*grow*out));
-        painter.circle_filled(center,40.+30.*grow,d::GREEN().gamma_multiply(0.06*grow*out));
-        if let Ok(egui::load::TexturePoll::Ready{texture})=egui::Image::new(egui::include_image!("../assets/logo.png")).load_for_size(ctx,Vec2::splat(96.)){
-            let size=96.*(0.8+0.2*grow);let rect=egui::Rect::from_center_size(center+Vec2::new(0.,(1.-grow)*18.),Vec2::splat(size));
-            painter.image(texture.id,rect,egui::Rect::from_min_max(egui::pos2(0.,0.),egui::pos2(1.,1.)),Color32::WHITE.gamma_multiply(grow*out));
+        let center=screen.center()-Vec2::new(0.,40.);
+        let accent=d::GREEN();
+        // Logo: lands with a slight overshoot.
+        let land=phase(0.,0.75);
+        if let Ok(egui::load::TexturePoll::Ready{texture})=egui::Image::new(egui::include_image!("../assets/logo.png")).load_for_size(ctx,Vec2::splat(150.)){
+            let size=150.*(0.78+0.22*back(land))*lift;
+            // Rounded like an app icon, not a hard black square.
+            let icon=egui::epaint::RectShape::filled(egui::Rect::from_center_size(center,Vec2::splat(size)),(size*0.24) as u8,Color32::WHITE.gamma_multiply(ease(land*1.4).min(1.)*out)).with_texture(texture.id,egui::Rect::from_min_max(egui::pos2(0.,0.),egui::pos2(1.,1.)));
+            painter.add(icon);
         }
-        let reveal=ease((t-0.35)/0.5);
-        let galley=painter.layout_no_wrap("Swap Prism".into(),d::bold(32.),Color32::WHITE.gamma_multiply(out));let(w,h)=(galley.size().x,galley.size().y);
-        let at=egui::pos2(screen.center().x-w/2.,center.y+66.+(1.-reveal)*8.);
-        let clip=egui::Rect::from_min_size(at-Vec2::new(4.,4.),Vec2::new(w*reveal+8.,h+8.));
-        painter.with_clip_rect(clip).galley(at,galley,Color32::WHITE);
-        painter.line_segment([egui::pos2(at.x,at.y+h+6.),egui::pos2(at.x+w*reveal,at.y+h+6.)],egui::Stroke::new(2_f32,d::GREEN().gamma_multiply(out)));
+        // Ring drawing itself clockwise from the top.
+        let sweep=ease(phase(0.2,1.15));
+        let radius=112.*lift;
+        if sweep>0.{
+            let steps=(96.*sweep).max(2.) as usize;
+            let points:Vec<egui::Pos2>=(0..=steps).map(|k|{let a=-std::f32::consts::FRAC_PI_2+std::f32::consts::TAU*sweep*k as f32/steps as f32;center+Vec2::new(a.cos(),a.sin())*radius}).collect();
+            painter.add(egui::Shape::line(points,egui::Stroke::new(2.5,accent.gamma_multiply(0.9*out))));
+        }
+        // Pulse once the ring closes.
+        let pulse=phase(1.1,1.75);
+        if pulse>0.&&pulse<1.{painter.circle_stroke(center,radius+70.*ease(pulse),egui::Stroke::new(2.,accent.gamma_multiply(0.45*(1.-pulse)*out)));}
+        // Name: letters rise one after another.
+        let font=d::bold(34.);let spacing=7.;
+        let letters:Vec<_>="SWAP PRISM".chars().map(|c|painter.layout_no_wrap(c.to_string(),font.clone(),Color32::WHITE)).collect();
+        let width:f32=letters.iter().map(|g|g.size().x).sum::<f32>()+spacing*(letters.len()-1) as f32;
+        let base=center.y+radius+44.;
+        let mut x=screen.center().x-width/2.;
+        for(k,g)in letters.into_iter().enumerate(){
+            let r=ease(phase(0.6+k as f32*0.055,0.95+k as f32*0.055));
+            let w=g.size().x;
+            if r>0.{painter.galley_with_override_text_color(egui::pos2(x,base+(1.-r)*16.),g,d::TEXT().gamma_multiply(r*out));}
+            x+=w+spacing;
+        }
+        // Line opening from the centre under the name.
+        let open=ease(phase(1.25,1.9));
+        if open>0.{let half=width/2.*open;let y=base+52.;painter.line_segment([egui::pos2(screen.center().x-half,y),egui::pos2(screen.center().x+half,y)],egui::Stroke::new(2.,accent.gamma_multiply(0.8*out)));}
     }
 
     /// Sub-pages of the current section, as underlined tabs under the title.
