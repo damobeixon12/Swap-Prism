@@ -16,6 +16,7 @@ mod live_match;
 mod engine;
 mod extras;
 mod assist;
+mod i18n;
 mod community;
 mod update_panel;
 mod ranks;
@@ -232,6 +233,9 @@ impl App {
         let started = Instant::now();
         egui_extras::install_image_loaders(&cc.egui_ctx);
         let config = platform::config(&root);
+        // Language: the saved choice, else Windows' (Spanish stays Spanish, anything else English).
+        i18n::set_english(match config["language"].as_str() { Some(code) => code == "en", None => !i18n::system_is_spanish() });
+        let _ = design::TRANSLATE.set(i18n::tr);
         design::set_theme(config["theme"].as_str().unwrap_or(""));
         design::setup(&cc.egui_ctx);
         let rows =
@@ -281,7 +285,7 @@ impl App {
             colors: vec!["Original".into()],
             texture_category: "Boostmeter".into(),
             texture_target: None,
-            status: "Leyendo inventario en segundo plano…".into(),
+            status: crate::i18n::t("Leyendo inventario en segundo plano…").into(),
             toast_text: String::new(),
             toast_at: Instant::now(),
             cards_index: 0,
@@ -447,12 +451,12 @@ impl App {
         }
         self.busy = true;
         self.job_fraction=None;
-        self.status = "Procesando en segundo plano…".into();
+        self.status = crate::i18n::t("Procesando en segundo plano…").into();
         let root = self.root.clone();
         let tx = self.tx.clone();
         let action = action.to_owned();
         thread::spawn(move || {
-            let result=std::panic::catch_unwind(std::panic::AssertUnwindSafe(||worker_progress(&root,&request,|p|{let _=tx.send(Event::Progress(p));}))).unwrap_or_else(|_|Err("El motor se interrumpió; revisa el estado de los cambios.".into()));
+            let result=std::panic::catch_unwind(std::panic::AssertUnwindSafe(||worker_progress(&root,&request,|p|{let _=tx.send(Event::Progress(p));}))).unwrap_or_else(|_|Err(crate::i18n::t("El motor se interrumpió; revisa el estado de los cambios.").into()));
             let _ = tx.send(Event::Engine(action, result));
         });
     }
@@ -472,9 +476,9 @@ impl App {
         let Some(pack) = self.packs.iter().find(|p| s(p, "category") == "Pelota" && s(p, "name") == name).cloned() else { return };
         self.ball_requeue = None;
         if self.plans.contains_key("GameInfo_Soccar_SF.upk") { return; }
-        self.queue_plan("GameInfo_Soccar_SF.upk".into(), json!({"category": "Pelota", "kind": "texture", "digest": pack["digest"], "target_id": Value::Null, "label": format!("Pelota · {name}")}));
+        self.queue_plan("GameInfo_Soccar_SF.upk".into(), json!({"category": crate::i18n::t("Pelota"), "kind": "texture", "digest": pack["digest"], "target_id": Value::Null, "label": crate::i18n::tr(&format!("Pelota · {name}"))}));
         self.save_queue();
-        self.status = "La pelota se volverá a aplicar para que se vea en todos los mapas. Pulsa Aplicar con el juego cerrado.".into();
+        self.status = crate::i18n::t("La pelota se volverá a aplicar para que se vea en todos los mapas. Pulsa Aplicar con el juego cerrado.").into();
     }
     fn queue_plan(&mut self,key:String,plan:Value){
         let category=s(&plan,"category").to_owned();
@@ -602,57 +606,57 @@ impl App {
                                 self.status = if let Some(error) = v["errors"][0].as_str() {
                                     error.to_owned()
                                 } else {
-                                    "Inventario actualizado. Elige el original y su apariencia."
+                                    crate::i18n::t("Inventario actualizado. Elige el original y su apariencia.")
                                         .into()
                                 };
                             } else if action.starts_with("media_") {
                                 if s(&v["media"],"source")==self.media_source{self.media_data=v["media"].clone();}
                                 if let Some(packs)=v["packs"].as_array(){self.packs=packs.clone();}
                                 if let Some(sounds)=v["sounds"].as_array(){self.audio_library=sounds.clone();}
-                                self.status=if action=="media_download"{"Contenido disponible en Mi biblioteca. Elígelo para añadirlo a los cambios sin aplicar."}else if action=="media_preview"{"Preescucha terminada. No se ha añadido el sonido a tu biblioteca."}else{"Catálogo actualizado."}.into();
+                                self.status=if action=="media_download"{crate::i18n::t("Contenido disponible en Mi biblioteca. Elígelo para añadirlo a los cambios sin aplicar.")}else if action=="media_preview"{crate::i18n::t("Preescucha terminada. No se ha añadido el sonido a tu biblioteca.")}else{crate::i18n::t("Catálogo actualizado.")}.into();
                             } else if action.starts_with("storage") {
                                 self.storage_result(&action, v);
                             } else if action.starts_with("workshop_") {
                                 self.workshop_data=v;
-                                self.status=if action=="workshop_download"||action=="workshop_import"{"Mapa guardado en la biblioteca. Pulsa Elegir para añadirlo a los cambios sin aplicar."}else{"Biblioteca de mapas actualizada."}.into();
+                                self.status=if action=="workshop_download"||action=="workshop_import"{crate::i18n::t("Mapa guardado en la biblioteca. Pulsa Elegir para añadirlo a los cambios sin aplicar.")}else{crate::i18n::t("Biblioteca de mapas actualizada.")}.into();
                             } else if action == "sound_import" {
                                 let kind=s(&v,"kind").to_owned();
                                 if !self.studio_draft["sounds"].is_object(){self.studio_draft["sounds"]=json!({});}
                                 self.studio_draft["sounds"][&kind]=v;
                                 self.audio_library=self.root.join("data/sounds").read_dir().into_iter().flatten().filter_map(|e|e.ok()).filter(|e|e.path().extension().and_then(|x|x.to_str())==Some("json")).map(|e|read_json(&e.path())).collect();
                                 self.save_studio_draft();
-                                self.status="MP3 validado. Escúchalo antes de aplicar.".into();
+                                self.status=crate::i18n::t("MP3 validado. Escúchalo antes de aplicar.").into();
                             } else if action == "sound_preview" {
                                 self.audio_preview=None;
-                                self.status="Preescucha terminada.".into();
+                                self.status=crate::i18n::t("Preescucha terminada.").into();
                             } else if action == "game_settings" || action == "game_settings_write" {
                                 self.settings_draft=v["values"].clone();
-                                self.status=if action=="game_settings_write"{format!("Ajustes guardados. Copia de seguridad en {}",s(&v,"backup"))}else{"Ajustes leídos de tu partida guardada.".into()};
+                                self.status=if action=="game_settings_write"{crate::i18n::tr(&format!("Ajustes guardados. Copia de seguridad en {}",s(&v,"backup")))}else{crate::i18n::t("Ajustes leídos de tu partida guardada.").into()};
                                 self.game_settings=v;
                             } else if action.starts_with("launcher_") {
                                 if v.get("steam").is_some(){self.launcher_state=v.clone();}
-                                self.status=match action.as_str(){"launcher_play"=>"Iniciando Rocket League…","launcher_steam_play"=>"Iniciando Rocket League desde Steam…","launcher_steam_add"=>"Rocket League añadido a Steam.",_=>"Lanzador listo."}.into();
+                                self.status=match action.as_str(){"launcher_play"=>crate::i18n::t("Iniciando Rocket League…"),"launcher_steam_play"=>crate::i18n::t("Iniciando Rocket League desde Steam…"),"launcher_steam_add"=>crate::i18n::t("Rocket League añadido a Steam."),_=>crate::i18n::t("Lanzador listo.")}.into();
                             } else if action == "verify_files" {
                                 self.state=v["state"].clone();self.profile_state=v["profile"].clone();
                                 let healed=v["healed"].as_array().map(|a|a.len()).unwrap_or(0);let modified=v["modified"].as_array().map(|a|a.len()).unwrap_or(0);
-                                self.status=if v["epic"]!=true{"No hay manifiesto de Epic (Steam): solo se comprobaron las copias de Swap Prism.".into()}else if modified>0{format!("{modified} archivo(s) modificados fuera de Swap Prism. Verifica los archivos en Epic y vuelve a comprobar.")}else if healed>0{format!("Archivos correctos. {healed} cambio(s) los había quitado Epic: pulsa «Volver a ponerlos» arriba.")}else{"Todos los archivos están correctos.".into()};
+                                self.status=if v["epic"]!=true{crate::i18n::t("No hay manifiesto de Epic (Steam): solo se comprobaron las copias de Swap Prism.").into()}else if modified>0{crate::i18n::tr(&format!("{modified} archivo(s) modificados fuera de Swap Prism. Verifica los archivos en Epic y vuelve a comprobar."))}else if healed>0{crate::i18n::tr(&format!("Archivos correctos. {healed} cambio(s) los había quitado Epic: pulsa «Volver a ponerlos» arriba."))}else{crate::i18n::t("Todos los archivos están correctos.").into()};
                                 self.file_check=v;
                             } else if action == "open_epic" {
-                                self.status="Epic abierto: Biblioteca → Rocket League → ⋯ → Gestionar → Verificar.".into();
+                                self.status=crate::i18n::t("Epic abierto: Biblioteca → Rocket League → ⋯ → Gestionar → Verificar.").into();
                             } else if action == "refresh_state" {
-                                self.state=v["state"].clone();self.status="Cambios comprobados contra los archivos actuales.".into();
+                                self.state=v["state"].clone();self.status=crate::i18n::t("Cambios comprobados contra los archivos actuales.").into();
                             } else if action == "profile_import" {
                                 let key=s(&v,"kind").to_owned();
                                 self.profile_draft[&key]=v["path"].clone();
                                 self.save_profile_draft();
                                 self.queue_profile(self.profile_draft.clone());
-                                self.status="Imagen añadida. Pulsa Aplicar abajo.".into();
+                                self.status=crate::i18n::t("Imagen añadida. Pulsa Aplicar abajo.").into();
                             } else if action == "import" {
                                 self.packs = v["packs"].as_array().cloned().unwrap_or_default();
                                 self.status = if let Some(e) = v["errors"][0].as_str() {
                                     e.to_owned()
                                 } else {
-                                    "Texturas importadas.".into()
+                                    crate::i18n::t("Texturas importadas.").into()
                                 };
                             } else {
                                 if v["profile"].is_object(){self.profile_state=v["profile"].clone();}
@@ -667,7 +671,7 @@ impl App {
                                     "{} paquetes verificados. Ya puedes abrir Rocket League.",
                                     v["count"]
                                 );
-                                if v["cached"]==true{self.status="El perfil ya estaba aplicado. No hay cambios pendientes.".into();}
+                                if v["cached"]==true{self.status=crate::i18n::t("El perfil ya estaba aplicado. No hay cambios pendientes.").into();}
                                 self.section = "Queue".into();
                             }
                         }
@@ -696,7 +700,7 @@ impl App {
                         self.check_catalog(false);
                     } else {
                         self.status =
-                            "No se encontró Rocket League. Selecciona su carpeta en Ajustes."
+                            crate::i18n::t("No se encontró Rocket League. Selecciona su carpeta en Ajustes.")
                                 .into();
                         self.section = "Settings".into();
                     }
@@ -708,8 +712,8 @@ impl App {
                     Ok(release)=>{
                         let found=release.is_some();self.available_update=release;
                         // Automatic: a new version is downloaded and installed without asking.
-                        if found{self.update_open=true;self.update_auto=true;self.status="Hay una versión nueva: se descarga e instala sola.".into();}
-                        else if self.update_open{self.status="Ya tienes la última versión publicada.".into();}
+                        if found{self.update_open=true;self.update_auto=true;self.status=crate::i18n::t("Hay una versión nueva: se descarga e instala sola.").into();}
+                        else if self.update_open{self.status=crate::i18n::t("Ya tienes la última versión publicada.").into();}
                     },
                     Err(error)=>{self.update_error=error.clone();self.status=error;}
                 }},
@@ -895,7 +899,7 @@ fn main() {
     ) {
         let _ = rfd::MessageDialog::new()
             .set_title("Swap Prism")
-            .set_description(format!("No se pudo abrir la ventana: {e}"))
+            .set_description(crate::i18n::tr(&format!("No se pudo abrir la ventana: {e}")))
             .set_level(rfd::MessageLevel::Error)
             .show();
     }

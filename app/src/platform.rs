@@ -296,7 +296,7 @@ unsafe extern "system" fn tray_procedure(window: windows_sys::Win32::Foundation:
             WM_LBUTTONUP => TRAY_TOGGLE.store(true, Ordering::Relaxed),
             WM_RBUTTONUP => {
                 let menu = CreatePopupMenu();
-                let (show, exit) = (wide("Mostrar / ocultar  (F8)"), wide("Salir"));
+                let (show, exit) = (wide(&crate::design::tr("Mostrar / ocultar  (F8)")), wide(&crate::design::tr("Salir")));
                 AppendMenuW(menu, MF_STRING, 1, show.as_ptr());
                 AppendMenuW(menu, MF_STRING, 2, exit.as_ptr());
                 let mut point = std::mem::zeroed();
@@ -339,7 +339,7 @@ pub fn tray(rgba: Vec<u8>) {
         data.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
         data.uCallbackMessage = TRAY_MESSAGE;
         data.hIcon = CreateIcon(std::ptr::null_mut(), 32, 32, 1, 32, mask.as_ptr(), bgra.as_ptr());
-        for (slot, unit) in data.szTip.iter_mut().zip(wide("Swap Prism · F8 para mostrar u ocultar")) { *slot = unit; }
+        for (slot, unit) in data.szTip.iter_mut().zip(wide(&crate::design::tr("Swap Prism · F8 para mostrar u ocultar"))) { *slot = unit; }
         if Shell_NotifyIconW(NIM_ADD, &data) == 0 { return; }
         TRAY_WINDOW.store(window as isize, Ordering::Relaxed);
         let mut message: MSG = std::mem::zeroed();

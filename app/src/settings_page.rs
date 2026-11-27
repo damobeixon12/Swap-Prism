@@ -37,7 +37,7 @@ impl App{
         let decimals=if step>=1.{0}else if step>=0.1{1}else{2};
         ui.horizontal(|ui|{
             ui.label(RichText::new(label).size(15.));
-            if self.settings_draft[key]!=saved&&ui.add(egui::Label::new(RichText::new("↺").size(15.).color(d::MUTED())).sense(egui::Sense::click())).on_hover_text("Deshacer").on_hover_cursor(egui::CursorIcon::PointingHand).clicked(){self.settings_draft[key]=saved.clone();}
+            if self.settings_draft[key]!=saved&&ui.add(egui::Label::new(RichText::new("↺").size(15.).color(d::MUTED())).sense(egui::Sense::click())).on_hover_text(crate::i18n::t("Deshacer")).on_hover_cursor(egui::CursorIcon::PointingHand).clicked(){self.settings_draft[key]=saved.clone();}
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center),|ui|{ui.label(RichText::new(format!("{value:.decimals$}")).strong());});
         });
         ui.spacing_mut().slider_width=ui.available_width();
@@ -48,8 +48,8 @@ impl App{
     pub(super) fn my_settings(&mut self,ui:&mut egui::Ui){
         self.ensure_game_settings();
         if self.game_settings.is_null(){
-            d::card().show(ui,|ui|{ui.label(RichText::new("Leyendo tus ajustes…").size(16.));d::muted(ui,"Se leen de la partida guardada de Rocket League, sin abrir el juego.");
-                if !self.busy&&ui.button("Volver a leer").clicked(){self.settings_loading=false;}});
+            d::card().show(ui,|ui|{ui.label(RichText::new(crate::i18n::t("Leyendo tus ajustes…")).size(16.));d::muted(ui,crate::i18n::t("Se leen de la partida guardada de Rocket League, sin abrir el juego."));
+                if !self.busy&&ui.button(crate::i18n::t("Volver a leer")).clicked(){self.settings_loading=false;}});
             return;
         }
         let changes=self.setting_changes();
@@ -58,9 +58,9 @@ impl App{
             if self.settings_tab==0{
                 // Two quiet blocks: what the camera sees, and how it moves.
                 ui.columns(2,|cols|{
-                    d::card().show(&mut cols[0],|ui|{d::muted(ui,"Vista");ui.add_space(8.);for row in &CAMERA[..4]{self.slider_row(ui,*row);}});
-                    d::card().show(&mut cols[1],|ui|{d::muted(ui,"Movimiento");ui.add_space(8.);for row in &CAMERA[4..]{self.slider_row(ui,*row);}
-                        for(key,label)in[("camera.shake","Vibración"),("camera.invert_swivel","Invertir giro")]{
+                    d::card().show(&mut cols[0],|ui|{d::muted(ui,crate::i18n::t("Vista"));ui.add_space(8.);for row in &CAMERA[..4]{self.slider_row(ui,*row);}});
+                    d::card().show(&mut cols[1],|ui|{d::muted(ui,crate::i18n::t("Movimiento"));ui.add_space(8.);for row in &CAMERA[4..]{self.slider_row(ui,*row);}
+                        for(key,label)in[("camera.shake",crate::i18n::t("Vibración")),("camera.invert_swivel",crate::i18n::t("Invertir giro"))]{
                             let mut on=self.settings_draft[key].as_bool().unwrap_or(false);if crate::design::toggle(ui,&mut on,label).changed(){self.settings_draft[key]=json!(on);}
                             ui.add_space(6.);
                         }});
@@ -71,28 +71,28 @@ impl App{
                     1=>{for row in CONTROLS{self.slider_row(ui,row);}}
                     _=>{
                         ui.horizontal(|ui|{
-                            ui.allocate_ui_with_layout(Vec2::new(220.,28.),egui::Layout::left_to_right(egui::Align::Center),|ui|{ui.set_min_width(220.);ui.label(RichText::new("Resolución").size(15.))});
+                            ui.allocate_ui_with_layout(Vec2::new(220.,28.),egui::Layout::left_to_right(egui::Align::Center),|ui|{ui.set_min_width(220.);ui.label(RichText::new(crate::i18n::t("Resolución")).size(15.))});
                             let mut w=ini_int(&self.settings_draft["video.res_x"]);let mut h=ini_int(&self.settings_draft["video.res_y"]);
                             if ui.add(egui::DragValue::new(&mut w).range(640..=7680)).changed(){self.settings_draft["video.res_x"]=json!(w.to_string());}
                             ui.label("×");
                             if ui.add(egui::DragValue::new(&mut h).range(360..=4320)).changed(){self.settings_draft["video.res_y"]=json!(h.to_string());}
                         });
                         ui.horizontal(|ui|{
-                            ui.allocate_ui_with_layout(Vec2::new(220.,28.),egui::Layout::left_to_right(egui::Align::Center),|ui|{ui.set_min_width(220.);ui.label(RichText::new("Modo de pantalla").size(15.))});
+                            ui.allocate_ui_with_layout(Vec2::new(220.,28.),egui::Layout::left_to_right(egui::Align::Center),|ui|{ui.set_min_width(220.);ui.label(RichText::new(crate::i18n::t("Modo de pantalla")).size(15.))});
                             let full=ini_bool(&self.settings_draft["video.fullscreen"]);let borderless=ini_bool(&self.settings_draft["video.borderless"]);
                             let mode=if full{0}else if borderless{1}else{2};
-                            for(i,label)in["Pantalla completa","Sin bordes","Ventana"].iter().enumerate(){
+                            for(i,label)in[crate::i18n::t("Pantalla completa"),crate::i18n::t("Sin bordes"),crate::i18n::t("Ventana")].iter().enumerate(){
                                 if ui.selectable_label(mode==i,*label).clicked(){self.settings_draft["video.fullscreen"]=json!(if i==0{"True"}else{"False"});self.settings_draft["video.borderless"]=json!(if i==1{"True"}else{"False"});}
                             }
                         });
                         ui.horizontal(|ui|{
-                            ui.allocate_ui_with_layout(Vec2::new(220.,28.),egui::Layout::left_to_right(egui::Align::Center),|ui|{ui.set_min_width(220.);ui.label(RichText::new("FPS máximos").size(15.))});
+                            ui.allocate_ui_with_layout(Vec2::new(220.,28.),egui::Layout::left_to_right(egui::Align::Center),|ui|{ui.set_min_width(220.);ui.label(RichText::new(crate::i18n::t("FPS máximos")).size(15.))});
                             let current=self.settings_draft["video.max_fps"].as_i64().unwrap_or(0);
                             egui::ComboBox::from_id_salt("max-fps").selected_text(current.to_string()).show_ui(ui,|ui|{for fps in FPS{if ui.selectable_label(current==fps,fps.to_string()).clicked(){self.settings_draft["video.max_fps"]=json!(fps);}}});
                         });
                         ui.add_space(6.);
-                        let mut vsync=ini_bool(&self.settings_draft["video.vsync"]);if crate::design::toggle(ui,&mut vsync,"Sincronización vertical (VSync)").changed(){self.settings_draft["video.vsync"]=json!(if vsync{"True"}else{"False"});}
-                        for(key,label)in[("video.weather","Efectos del tiempo"),("video.light_shafts","Rayos de luz"),("video.lens_flares","Destellos de lente")]{
+                        let mut vsync=ini_bool(&self.settings_draft["video.vsync"]);if crate::design::toggle(ui,&mut vsync,crate::i18n::t("Sincronización vertical (VSync)")).changed(){self.settings_draft["video.vsync"]=json!(if vsync{"True"}else{"False"});}
+                        for(key,label)in[("video.weather",crate::i18n::t("Efectos del tiempo")),("video.light_shafts",crate::i18n::t("Rayos de luz")),("video.lens_flares",crate::i18n::t("Destellos de lente"))]{
                             let mut on=self.settings_draft[key].as_bool().unwrap_or(false);if crate::design::toggle(ui,&mut on,label).changed(){self.settings_draft[key]=json!(on);}
                         }
                     }
@@ -103,14 +103,14 @@ impl App{
             // Save only shows up once something changed.
             if !changes.is_empty(){ui.with_layout(egui::Layout::right_to_left(egui::Align::Center),|ui|{
                 let can=!self.busy&&!self.running;
-                let save=ui.add_enabled(can,d::primary("Guardar cambios"));
-                let save=if self.running{save.on_disabled_hover_text("Cierra Rocket League: el juego reescribe sus ajustes al salir.")}else{save};
+                let save=ui.add_enabled(can,d::primary(crate::i18n::t("Guardar cambios")));
+                let save=if self.running{save.on_disabled_hover_text(crate::i18n::t("Cierra Rocket League: el juego reescribe sus ajustes al salir."))}else{save};
                 if save.clicked(){
                     let mut out=serde_json::Map::new();
                     for(k,v)in changes.iter(){out.insert(k.clone(),if k=="video.res_x"||k=="video.res_y"{json!(ini_int(v))}else if k.starts_with("video.")&&v.is_string(){json!(ini_bool(v))}else{v.clone()});}
                     self.call("game_settings_write",json!({"action":"game_settings_write","changes":out}));
                 }
-                if ui.add_enabled(!self.busy,d::button("Descartar",d::MUTED())).clicked(){self.settings_draft=self.game_settings["values"].clone();}
+                if ui.add_enabled(!self.busy,d::button(crate::i18n::t("Descartar"),d::MUTED())).clicked(){self.settings_draft=self.game_settings["values"].clone();}
             });}
         });
     }
@@ -130,7 +130,7 @@ impl App{
         ui.ctx().request_repaint_after(std::time::Duration::from_secs(5));
         let skills=self.game_settings["skills"].as_array().cloned().unwrap_or_default();
         egui::ScrollArea::vertical().id_salt("my-ranks").show(ui,|ui|{
-            if skills.is_empty(){d::card().show(ui,|ui|{ui.label(RichText::new(if self.game_settings.is_null(){"Leyendo tus rangos…"}else{"Todavía no hay rangos en tu partida guardada."}).size(16.));d::muted(ui,"Juega una partida clasificatoria y cierra el juego para que aparezca aquí.");});return;}
+            if skills.is_empty(){d::card().show(ui,|ui|{ui.label(RichText::new(if self.game_settings.is_null(){crate::i18n::t("Leyendo tus rangos…")}else{crate::i18n::t("Todavía no hay rangos en tu partida guardada.")}).size(16.));d::muted(ui,crate::i18n::t("Juega una partida clasificatoria y cierra el juego para que aparezca aquí."));});return;}
             let gap=14.;let columns=((ui.available_width()+gap)/(250.+gap)).floor().max(1.) as usize;let width=(ui.available_width()-gap*(columns as f32-1.))/columns as f32;
             let rows:Vec<(&str,usize,i64)>=RANK_MODES.iter().filter_map(|(id,label)|skills.iter().find(|s|s["Playlist"].as_i64()==Some(*id)).map(|s|(*label,s["Tier"].as_u64().unwrap_or(0) as usize,s["MatchesPlayed"].as_i64().unwrap_or(0)))).collect();
             for chunk in rows.chunks(columns){
@@ -141,15 +141,15 @@ impl App{
                             ui.set_width(width-42.);
                             ui.horizontal(|ui|{
                                 let(rect,_)=ui.allocate_exact_size(Vec2::splat(56.),egui::Sense::hover());crate::ranks::rank_icon(ui,rect,*tier);
-                                ui.vertical(|ui|{ui.label(RichText::new(*label).size(13.).color(d::MUTED()));ui.label(RichText::new(crate::ranks::tier_label(*tier)).size(18.).strong());ui.label(RichText::new(if *matches==1{"1 partida".to_owned()}else{format!("{matches} partidas")}).size(12.5).color(d::MUTED()));});
+                                ui.vertical(|ui|{ui.label(RichText::new(*label).size(13.).color(d::MUTED()));ui.label(RichText::new(crate::ranks::tier_label(*tier)).size(18.).strong());ui.label(RichText::new(if *matches==1{crate::i18n::t("1 partida").to_owned()}else{crate::i18n::tr(&format!("{matches} partidas"))}).size(12.5).color(d::MUTED()));});
                             });
                         });});
                     }
                 });
                 ui.add_space(gap);
             }
-            d::muted(ui,"Leído de tu partida guardada: se actualiza solo cada vez que el juego guarda (al acabar una partida o al cerrarlo). El MMR exacto no se guarda en tu PC; para verlo usa la pestaña Tracker web.");
-            if ui.add_enabled(!self.busy,egui::Button::new(RichText::new("Actualizar").color(d::MUTED())).frame(false)).clicked(){self.game_settings=Value::Null;self.settings_loading=false;}
+            d::muted(ui,crate::i18n::t("Leído de tu partida guardada: se actualiza solo cada vez que el juego guarda (al acabar una partida o al cerrarlo). El MMR exacto no se guarda en tu PC; para verlo usa la pestaña Tracker web."));
+            if ui.add_enabled(!self.busy,egui::Button::new(RichText::new(crate::i18n::t("Actualizar")).color(d::MUTED())).frame(false)).clicked(){self.game_settings=Value::Null;self.settings_loading=false;}
         });
     }
 }

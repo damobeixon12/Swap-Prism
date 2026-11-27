@@ -124,6 +124,9 @@ impl Surface {
         response
     }
 }
+/// Set by the app to translate the texts these helpers show; the updater and editor, which share this file, don't.
+pub static TRANSLATE: std::sync::OnceLock<fn(&str) -> String> = std::sync::OnceLock::new();
+pub fn tr(text: &str) -> String { TRANSLATE.get().map_or_else(|| text.to_owned(), |f| f(text)) }
 pub fn bold(size: f32) -> egui::FontId {
     egui::FontId::new(size, egui::FontFamily::Name("Bold".into()))
 }
@@ -136,15 +139,15 @@ pub fn card() -> Surface {
     )
 }
 pub fn button(label: &str, tone: Color32) -> egui::Button<'_> {
-    egui::Button::new(RichText::new(label).color(tone))
+    egui::Button::new(RichText::new(tr(label)).color(tone))
         .fill(LINE().gamma_multiply(0.7))
         .stroke(Stroke::NONE)
         .corner_radius(99)
         .min_size(Vec2::new(0., 40.))
 }
 /// On/off switch (replaces checkboxes): animated pill, label beside it, both clickable.
-pub fn toggle(ui: &mut egui::Ui, on: &mut bool, label: impl Into<egui::WidgetText>) -> egui::Response {
-    let label = label.into();
+pub fn toggle(ui: &mut egui::Ui, on: &mut bool, label: &str) -> egui::Response {
+    let label = tr(label);
     ui.horizontal(|ui| {
         let (rect, mut response) = ui.allocate_exact_size(Vec2::new(40., 24.), egui::Sense::click());
         let text = ui.add(egui::Label::new(label).sense(egui::Sense::click()));
@@ -162,7 +165,7 @@ pub fn toggle(ui: &mut egui::Ui, on: &mut bool, label: impl Into<egui::WidgetTex
 }
 /// Filled call-to-action in the theme accent («Aplicar»).
 pub fn primary(label: &str) -> egui::Button<'_> {
-    egui::Button::new(RichText::new(label).color(ON_ACCENT()).strong())
+    egui::Button::new(RichText::new(tr(label)).color(ON_ACCENT()).strong())
         .fill(GREEN())
         .stroke(Stroke::NONE)
         .corner_radius(99)
@@ -175,7 +178,7 @@ pub fn tabs(ui: &mut egui::Ui, labels: &[&str], selected: usize) -> Option<usize
         ui.spacing_mut().item_spacing = Vec2::new(8., 8.);
         for (i, label) in labels.iter().enumerate() {
             let active = i == selected;
-            let text = RichText::new(*label).size(14.).color(if active { BACKGROUND() } else { MUTED() });
+            let text = RichText::new(tr(label)).size(14.).color(if active { BACKGROUND() } else { MUTED() });
             let button = egui::Button::new(text).fill(if active { TEXT() } else { PANEL() }).stroke(Stroke::NONE).corner_radius(99).min_size(Vec2::new(0., 34.));
             if ui.add(button).on_hover_cursor(egui::CursorIcon::PointingHand).clicked() { clicked = Some(i); }
         }
@@ -187,19 +190,19 @@ pub fn tabs(ui: &mut egui::Ui, labels: &[&str], selected: usize) -> Option<usize
 pub fn dot_label(ui: &mut egui::Ui, text: &str, color: Color32) {
     let (rect, _) = ui.allocate_exact_size(Vec2::new(10., 18.), egui::Sense::hover());
     ui.painter().circle_filled(rect.center(), 3.5, color);
-    ui.label(RichText::new(text).size(14.).color(MUTED()));
+    ui.label(RichText::new(tr(text)).size(14.).color(MUTED()));
 }
 pub fn muted(ui: &mut egui::Ui, text: impl Into<String>) {
-    ui.label(RichText::new(text).color(MUTED()));
+    ui.label(RichText::new(tr(&text.into())).color(MUTED()));
 }
 pub fn eyebrow(ui: &mut egui::Ui, text: &str, color: Color32) {
-    ui.label(RichText::new(text).size(12.).strong().color(color));
+    ui.label(RichText::new(tr(text)).size(12.).strong().color(color));
 }
 pub fn search(ui: &mut egui::Ui, value: &mut String, hint: &str) {
     ui.add_sized(
         [ui.available_width(), 38.],
         egui::TextEdit::singleline(value)
-            .hint_text(hint)
+            .hint_text(tr(hint))
             .margin(Vec2::new(12., 10.)),
     );
 }

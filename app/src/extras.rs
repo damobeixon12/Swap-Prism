@@ -46,7 +46,7 @@ impl App {
         if !(on || show || response.hovered()) { return; }
         ui.painter().circle_filled(center, 12., d::BACKGROUND().gamma_multiply(0.8));
         star(ui.painter(), center, 7.5, on, if on { d::GREEN() } else { d::MUTED() });
-        if response.on_hover_cursor(egui::CursorIcon::PointingHand).on_hover_text(if on { "Quitar de favoritos" } else { "Añadir a favoritos" }).clicked() { self.toggle_favorite(key); }
+        if response.on_hover_cursor(egui::CursorIcon::PointingHand).on_hover_text(if on { crate::i18n::t("Quitar de favoritos") } else { crate::i18n::t("Añadir a favoritos") }).clicked() { self.toggle_favorite(key); }
     }
 
     // ---------- what is applied ----------
@@ -69,7 +69,7 @@ impl App {
         if ok { self.record_applied(); } else { self.applying.clear(); }
         if std::mem::take(&mut self.notify_apply) {
             ctx.send_viewport_cmd(egui::ViewportCommand::RequestUserAttention(egui::UserAttentionType::Informational));
-            if ok { self.status = format!("Listo: cambios aplicados al cerrar el juego. {}", self.status); }
+            if ok { self.status = crate::i18n::tr(&format!("Listo: cambios aplicados al cerrar el juego. {}", self.status)); }
         }
     }
 
@@ -106,7 +106,7 @@ impl App {
     fn start_reapply(&mut self) {
         match self.reapply_request() {
             Some(request) => self.call("apply", request),
-            None => { self.reset_dismissed = true; self.status = "Esos cambios se aplicaron con una versión anterior de Swap Prism. Vuelve a añadirlos desde Skins o Texturas.".into(); }
+            None => { self.reset_dismissed = true; self.status = crate::i18n::t("Esos cambios se aplicaron con una versión anterior de Swap Prism. Vuelve a añadirlos desde Skins o Texturas.").into(); }
         }
     }
 
@@ -131,17 +131,17 @@ impl App {
             egui::Frame::new().fill(d::PANEL()).stroke(egui::Stroke::new(1_f32, d::LINE())).corner_radius(12).inner_margin(egui::Margin { left: 20, right: 10, top: 8, bottom: 8 })
                 .shadow(egui::Shadow { offset: [0, 8], blur: 24, spread: 0, color: Color32::from_black_alpha(110) }).show(ui, |ui| {
                 ui.horizontal(|ui| {
-                    ui.label(RichText::new(if count == 1 { "Rocket League ha quitado 1 cambio".to_owned() } else { format!("Rocket League ha quitado {count} cambios") }).size(15.));
+                    ui.label(RichText::new(if count == 1 { crate::i18n::t("Rocket League ha quitado 1 cambio").to_owned() } else { crate::i18n::tr(&format!("Rocket League ha quitado {count} cambios")) }).size(15.));
                     ui.add_space(14.);
                     if self.apply_waiting == Some("reapply") {
-                        d::muted(ui, "Se pondrán al cerrar el juego");
-                        if ui.add(egui::Button::new(RichText::new("Cancelar").color(d::MUTED())).frame(false)).clicked() { self.apply_waiting = None; }
+                        d::muted(ui, crate::i18n::t("Se pondrán al cerrar el juego"));
+                        if ui.add(egui::Button::new(RichText::new(crate::i18n::t("Cancelar")).color(d::MUTED())).frame(false)).clicked() { self.apply_waiting = None; }
                         return;
                     }
-                    if ui.add(egui::Button::new(RichText::new("Ahora no").color(d::MUTED())).frame(false)).clicked() { self.reset_dismissed = true; }
-                    let label = if self.running { "Ponerlos al cerrar el juego" } else { "Volver a ponerlos" };
+                    if ui.add(egui::Button::new(RichText::new(crate::i18n::t("Ahora no")).color(d::MUTED())).frame(false)).clicked() { self.reset_dismissed = true; }
+                    let label = if self.running { crate::i18n::t("Ponerlos al cerrar el juego") } else { crate::i18n::t("Volver a ponerlos") };
                     if ui.add_enabled(!self.busy && self.game.is_some() && self.apply_waiting.is_none(), d::primary(label)).clicked() {
-                        if self.running { self.apply_waiting = Some("reapply"); self.status = "Se volverán a poner cuando cierres Rocket League.".into(); } else { self.start_reapply(); }
+                        if self.running { self.apply_waiting = Some("reapply"); self.status = crate::i18n::t("Se volverán a poner cuando cierres Rocket League.").into(); } else { self.start_reapply(); }
                     }
                 });
             });
@@ -163,7 +163,7 @@ impl App {
         self.sets.push(json!({"name": name, "plans": plans, "studio": self.studio_draft, "profile": profile}));
         self.write_sets();
         self.set_name.clear();
-        self.status = format!("Conjunto «{name}» guardado.");
+        self.status = crate::i18n::tr(&format!("Conjunto «{name}» guardado."));
     }
 
     /// Puts a set in the queue (only what differs from what is already applied).
@@ -178,7 +178,7 @@ impl App {
             self.save_studio_draft();
         }
         if set["profile"].is_object() { self.queue_profile(set["profile"].clone()); }
-        self.status = if self.pending_count() == 0 { format!("«{}» ya es lo que tienes puesto.", s(set, "name")) } else { format!("«{}» listo. Pulsa Aplicar.", s(set, "name")) };
+        self.status = if self.pending_count() == 0 { crate::i18n::tr(&format!("«{}» ya es lo que tienes puesto.", s(set, "name"))) } else { crate::i18n::tr(&format!("«{}» listo. Pulsa Aplicar.", s(set, "name"))) };
     }
 
     /// Shareable file: skins, textures, maps and colours. Never the profile or local sounds.
@@ -189,7 +189,7 @@ impl App {
         let studio: serde_json::Map<String, Value> = set["studio"].as_object().into_iter().flatten()
             .filter(|(k, _)| SHARED_STUDIO.contains(&k.as_str())).map(|(k, v)| (k.clone(), v.clone())).collect();
         let file = json!({"swapprism_set": 1, "name": set["name"], "plans": plans, "studio": studio});
-        self.status = match fs::write(&path, serde_json::to_vec_pretty(&file).unwrap()) { Ok(()) => "Conjunto exportado. Compártelo con quien quieras.".into(), Err(e) => e.to_string() };
+        self.status = match fs::write(&path, serde_json::to_vec_pretty(&file).unwrap()) { Ok(()) => crate::i18n::t("Conjunto exportado. Compártelo con quien quieras.").into(), Err(e) => e.to_string() };
     }
 
     /// The original object for an imported plan: theirs if you own it, else yours in the same slot.
@@ -203,7 +203,7 @@ impl App {
     fn import_set(&mut self) {
         let Some(path) = rfd::FileDialog::new().add_filter("Swap Prism", &["swapprism", "json"]).pick_file() else { return };
         let file = read_json(&path);
-        if file["swapprism_set"] != 1 { self.status = "Ese archivo no es un conjunto de Swap Prism.".into(); return; }
+        if file["swapprism_set"] != 1 { self.status = crate::i18n::t("Ese archivo no es un conjunto de Swap Prism.").into(); return; }
         let (mut plans, mut skipped) = (serde_json::Map::new(), 0);
         for plan in file["plans"].as_object().into_iter().flatten().map(|(_, p)| p) {
             let kind = s(plan, "kind");
@@ -222,7 +222,7 @@ impl App {
                         "label": format!("{} · {}", category, s(&pack, "name"))})))
                 }),
                 "workshop" => self.workshop_data["maps"].as_array().into_iter().flatten().find(|m| m["key"] == plan["map_key"] && m["local"].is_object())
-                    .map(|m| ("workshop".to_owned(), json!({"kind": "workshop", "category": "Workshop", "target": "Labs_Utopia_P.upk", "map_key": m["key"], "label": format!("Mapa → {}", s(m, "name"))}))),
+                    .map(|m| ("workshop".to_owned(), json!({"kind": "workshop", "category": "Workshop", "target": "Labs_Utopia_P.upk", "map_key": m["key"], "label": crate::i18n::tr(&format!("Mapa → {}", s(m, "name")))}))),
                 _ => None,
             };
             match adapted { Some((k, p)) => { plans.insert(k, p); } None => skipped += 1 }
@@ -234,22 +234,22 @@ impl App {
             if !theirs.is_null() && std::mem::discriminant(theirs) == std::mem::discriminant(mine) { studio.insert(key.into(), theirs.clone()); }
         }
         let base = s(&file, "name").chars().filter(|c| !c.is_control()).take(40).collect::<String>();
-        let base = if base.trim().is_empty() { "Importado".to_owned() } else { base.trim().to_owned() };
+        let base = if base.trim().is_empty() { crate::i18n::t("Importado").to_owned() } else { base.trim().to_owned() };
         let mut name = base.clone();
         let mut n = 2;
         while self.sets.iter().any(|x| s(x, "name") == name) { name = format!("{base} ({n})"); n += 1; }
         self.sets.push(json!({"name": name, "plans": plans, "studio": studio, "profile": Value::Null}));
         self.write_sets();
-        self.status = if skipped == 0 { format!("«{name}» importado. Pulsa Poner para usarlo.") } else { format!("«{name}» importado. {skipped} cambio(s) no se pueden usar en tu PC (falta la textura, el mapa o el objeto).") };
+        self.status = if skipped == 0 { crate::i18n::tr(&format!("«{name}» importado. Pulsa Poner para usarlo.")) } else { crate::i18n::tr(&format!("«{name}» importado. {skipped} cambio(s) no se pueden usar en tu PC (falta la textura, el mapa o el objeto).")) };
     }
 
     pub(super) fn sets_card(&mut self, ui: &mut egui::Ui) {
         let mut action: Option<(&str, Value)> = None;
         d::card().show(ui, |ui| {
             ui.horizontal(|ui| {
-                ui.label(RichText::new("Conjuntos").strong().size(16.));
+                ui.label(RichText::new(crate::i18n::t("Conjuntos")).strong().size(16.));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui.add_enabled(!self.busy, d::button("Importar", d::TEXT()).min_size(Vec2::new(0., 32.))).clicked() { action = Some(("import", Value::Null)); }
+                    if ui.add_enabled(!self.busy, d::button(crate::i18n::t("Importar"), d::TEXT()).min_size(Vec2::new(0., 32.))).clicked() { action = Some(("import", Value::Null)); }
                 });
             });
             ui.add_space(4.);
@@ -258,19 +258,19 @@ impl App {
                     ui.set_min_height(36.);
                     ui.label(RichText::new(s(set, "name")).size(15.));
                     let count = set["plans"].as_object().map_or(0, |p| p.len());
-                    d::muted(ui, if count == 1 { "1 cambio".to_owned() } else { format!("{count} cambios") });
+                    d::muted(ui, if count == 1 { crate::i18n::t("1 cambio").to_owned() } else { crate::i18n::tr(&format!("{count} cambios")) });
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if ui.add(egui::Label::new(RichText::new("✕").color(d::MUTED())).sense(egui::Sense::click())).on_hover_text("Borrar").on_hover_cursor(egui::CursorIcon::PointingHand).clicked() { action = Some(("delete", set.clone())); }
+                        if ui.add(egui::Label::new(RichText::new("✕").color(d::MUTED())).sense(egui::Sense::click())).on_hover_text(crate::i18n::t("Borrar")).on_hover_cursor(egui::CursorIcon::PointingHand).clicked() { action = Some(("delete", set.clone())); }
                         ui.add_space(6.);
-                        if ui.add(egui::Button::new(RichText::new("Exportar").color(d::MUTED())).frame(false)).clicked() { action = Some(("export", set.clone())); }
-                        if ui.add_enabled(!self.busy, d::button("Poner", d::GREEN()).min_size(Vec2::new(0., 32.))).clicked() { action = Some(("use", set.clone())); }
+                        if ui.add(egui::Button::new(RichText::new(crate::i18n::t("Exportar")).color(d::MUTED())).frame(false)).clicked() { action = Some(("export", set.clone())); }
+                        if ui.add_enabled(!self.busy, d::button(crate::i18n::t("Poner"), d::GREEN()).min_size(Vec2::new(0., 32.))).clicked() { action = Some(("use", set.clone())); }
                     });
                 });
             }
             ui.add_space(6.);
             ui.horizontal(|ui| {
-                ui.add(egui::TextEdit::singleline(&mut self.set_name).hint_text("Nombre, p. ej. Competitivo").desired_width(240.).margin(Vec2::new(10., 8.)));
-                if ui.add_enabled(!self.set_name.trim().is_empty(), d::button("Guardar lo que tengo", d::TEXT()).min_size(Vec2::new(0., 34.))).clicked() { action = Some(("save", Value::Null)); }
+                ui.add(egui::TextEdit::singleline(&mut self.set_name).hint_text(crate::i18n::t("Nombre, p. ej. Competitivo")).desired_width(240.).margin(Vec2::new(10., 8.)));
+                if ui.add_enabled(!self.set_name.trim().is_empty(), d::button(crate::i18n::t("Guardar lo que tengo"), d::TEXT()).min_size(Vec2::new(0., 34.))).clicked() { action = Some(("save", Value::Null)); }
             });
         });
         match action {
@@ -289,19 +289,19 @@ impl App {
         let q = query.trim().to_lowercase();
         let hit = |key: &str, name: &str| if q.is_empty() { self.is_favorite(key) } else { name.to_lowercase().contains(&q) };
         let mut out = Vec::new();
-        for pack in &self.packs { if hit(&format!("pack:{}", s(pack, "digest")), s(pack, "name")) { out.push(("pack", s(pack, "name").to_owned(), format!("Textura · {}", s(pack, "category")), pack.clone())); } }
-        for audio in &self.audio_library { if hit(&format!("sound:{}", s(audio, "path")), s(audio, "name")) { out.push(("sound", s(audio, "name").to_owned(), "Sonido".into(), audio.clone())); } }
-        for map in self.workshop_data["maps"].as_array().into_iter().flatten() { if hit(&format!("map:{}", s(map, "key")), s(map, "name")) { out.push(("map", s(map, "name").to_owned(), "Mapa".into(), map.clone())); } }
+        for pack in &self.packs { if hit(&format!("pack:{}", s(pack, "digest")), s(pack, "name")) { out.push(("pack", s(pack, "name").to_owned(), crate::i18n::tr(&format!("Textura · {}", s(pack, "category"))), pack.clone())); } }
+        for audio in &self.audio_library { if hit(&format!("sound:{}", s(audio, "path")), s(audio, "name")) { out.push(("sound", s(audio, "name").to_owned(), crate::i18n::t("Sonido").into(), audio.clone())); } }
+        for map in self.workshop_data["maps"].as_array().into_iter().flatten() { if hit(&format!("map:{}", s(map, "key")), s(map, "name")) { out.push(("map", s(map, "name").to_owned(), crate::i18n::t("Mapa").into(), map.clone())); } }
         let mut seen = std::collections::HashSet::new();
         for row in &self.rows {
             let Some((_, slot)) = SLOTS.iter().find(|(k, _)| *k == s(row, "Slot")) else { continue };
             if s(row, "AssetPackage").is_empty() || !hit(&format!("item:{}", row["ID"]), s(row, "Product")) || !seen.insert((s(row, "Slot"), s(row, "Product"))) { continue; }
-            out.push(("item", s(row, "Product").to_owned(), slot.to_string(), row.clone()));
+            out.push(("item", s(row, "Product").to_owned(), crate::i18n::t(slot).to_owned(), row.clone()));
             if out.len() > 200 { break; }
         }
         let key = |r: &(&str, String, String, Value)| match r.0 { "pack" => format!("pack:{}", s(&r.3, "digest")), "sound" => format!("sound:{}", s(&r.3, "path")), "map" => format!("map:{}", s(&r.3, "key")), _ => format!("item:{}", r.3["ID"]) };
         out.sort_by_key(|r| (!self.is_favorite(&key(r)), !r.1.to_lowercase().starts_with(&q)));
-        let sections = crate::navigation::NAV.iter().filter(|(_, l)| !q.is_empty() && l.to_lowercase().contains(&q)).map(|(k, l)| ("section", l.to_string(), "Sección".to_owned(), json!(k)));
+        let sections = crate::navigation::NAV.iter().filter(|(_, l)| !q.is_empty() && crate::i18n::t(l).to_lowercase().contains(&q)).map(|(k, l)| ("section", crate::i18n::t(l).to_owned(), crate::i18n::t("Sección").to_owned(), json!(k)));
         let mut all: Vec<_> = sections.collect();
         all.extend(out);
         all.truncate(8);
@@ -340,12 +340,12 @@ impl App {
             egui::Frame::new().fill(d::PANEL()).stroke(egui::Stroke::new(1_f32, d::LINE())).corner_radius(14).inner_margin(egui::Margin::symmetric(8, 8))
                 .shadow(egui::Shadow { offset: [0, 12], blur: 40, spread: 0, color: Color32::from_black_alpha(140) }).show(ui, |ui| {
                 ui.set_width(580.);
-                let edit = ui.add(egui::TextEdit::singleline(&mut query).hint_text("Busca una skin, una textura, un sonido, un mapa…").font(egui::FontId::proportional(17.)).frame(false).margin(Vec2::new(12., 12.)).desired_width(f32::INFINITY));
+                let edit = ui.add(egui::TextEdit::singleline(&mut query).hint_text(crate::i18n::t("Busca una skin, una textura, un sonido, un mapa…")).font(egui::FontId::proportional(17.)).frame(false).margin(Vec2::new(12., 12.)).desired_width(f32::INFINITY));
                 edit.request_focus();
                 if edit.changed() { self.palette_index = 0; }
                 if results.is_empty() {
                     ui.add_space(4.);
-                    ui.horizontal(|ui| { ui.add_space(12.); d::muted(ui, if query.trim().is_empty() { "Escribe para buscar. Tus favoritos ★ aparecen aquí." } else { "Sin resultados." }); });
+                    ui.horizontal(|ui| { ui.add_space(12.); d::muted(ui, if query.trim().is_empty() { crate::i18n::t("Escribe para buscar. Tus favoritos ★ aparecen aquí.") } else { crate::i18n::t("Sin resultados.") }); });
                     ui.add_space(8.);
                     return;
                 }

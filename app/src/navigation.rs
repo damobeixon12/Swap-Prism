@@ -7,7 +7,7 @@ pub(super) const NAV:[(&str,&str);11]=[
     ("MySettings","Mis ajustes"),("Overlay","Overlay"),("Tracker","Tracker"),("Workshop","Mapas"),("Queue","Cambios"),("Settings","Ajustes"),
 ];
 /// Group heading printed before the first entry of each group.
-fn group(key:&str)->Option<&'static str>{match key{"Skins"=>Some("PERSONALIZAR"),"MySettings"=>Some("PARTIDA"),"Queue"=>Some("APP"),_=>None}}
+fn group(key:&str)->Option<&'static str>{match key{"Skins"=>Some(crate::i18n::t("PERSONALIZAR")),"MySettings"=>Some(crate::i18n::t("PARTIDA")),"Queue"=>Some("APP"),_=>None}}
 
 fn row(ui:&mut egui::Ui,key:&str,label:&str,selected:bool,badge:usize)->bool{
     ui.push_id(("navigation-row",key),|ui|{
@@ -18,7 +18,7 @@ fn row(ui:&mut egui::Ui,key:&str,label:&str,selected:bool,badge:usize)->bool{
         let color=Color32::from(egui::lerp(egui::Rgba::from(d::MUTED())..=egui::Rgba::from(d::TEXT()),active.max(hover)));
         let x=rect.left()+22.;
         crate::icons::paint(ui,egui::Rect::from_center_size(egui::pos2(x,rect.center().y),Vec2::splat(17.)),key,color);
-        ui.painter().text(egui::pos2(x+20.,rect.center().y),egui::Align2::LEFT_CENTER,label,egui::FontId::proportional(15.),color);
+        ui.painter().text(egui::pos2(x+20.,rect.center().y),egui::Align2::LEFT_CENTER,crate::i18n::tr(label),egui::FontId::proportional(15.),color);
         if badge>0{
             let c=egui::pos2(rect.right()-18.,rect.center().y);
             ui.painter().circle_filled(c,9.,d::GREEN());
@@ -35,7 +35,7 @@ impl App{
         ui.spacing_mut().item_spacing.y=2.;
         let query=self.navigation_search.to_lowercase();let pending=self.pending_count();
         for(key,label)in NAV{
-            if !query.is_empty()&&!label.to_lowercase().contains(&query){continue;}
+            if !query.is_empty()&&!crate::i18n::t(label).to_lowercase().contains(&query){continue;}
             if let Some(title)=group(key).filter(|_|query.is_empty()){ui.add_space(14.);ui.label(RichText::new(title).size(11.).color(d::MUTED()));ui.add_space(4.);}
             if row(ui,key,label,self.section==key,if key=="Queue"{pending}else{0}){self.go_to(key);self.navigation_search.clear();}
         }

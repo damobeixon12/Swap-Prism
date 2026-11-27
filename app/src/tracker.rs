@@ -26,7 +26,7 @@ pub fn parse_lobby(result:&str)->Vec<(i64,String,usize)>{
 }
 
 pub fn profile_url(name:&str)->Result<String,String>{
-    let name=name.trim();if name.is_empty()||name.chars().count()>64||name.chars().any(|c|c.is_control()){return Err("Escribe tu nombre de Epic exacto.".into());}
+    let name=name.trim();if name.is_empty()||name.chars().count()>64||name.chars().any(|c|c.is_control()){return Err(crate::i18n::t("Escribe tu nombre de Epic exacto.").into());}
     let encoded:String=name.bytes().map(|b|if b.is_ascii_alphanumeric()||b"-._~".contains(&b){(b as char).to_string()}else{format!("%{b:02X}")}).collect();
     Ok(format!("https://rocketleague.tracker.network/rocket-league/profile/epic/{encoded}/overview"))
 }
@@ -156,7 +156,7 @@ impl App{
                 .with_navigation_handler(|url|url.starts_with("https://rocketleague.tracker.network/")||url.starts_with("https://tracker.gg/")||url=="about:blank")
                 .with_new_window_req_handler(|_,_|wry::NewWindowResponse::Deny)
                 .build_as_child(frame);
-            match view{Ok(view)=>{self.tracker_web=Some(view);self.tracker_loaded=url.clone();},Err(e)=>self.tracker_error=format!("No se pudo abrir la vista web: {e}. Puedes usar Abrir en navegador.")}
+            match view{Ok(view)=>{self.tracker_web=Some(view);self.tracker_loaded=url.clone();},Err(e)=>self.tracker_error=crate::i18n::tr(&format!("No se pudo abrir la vista web: {e}. Puedes usar Abrir en navegador."))}
         }
         if let Some(view)=&self.tracker_web{
             if self.tracker_loaded!=url{let _=view.load_url(&url);self.tracker_loaded=url;}

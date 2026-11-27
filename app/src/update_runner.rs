@@ -4,6 +4,7 @@ use eframe::egui;
 use sha2::{Digest,Sha256};
 use windows_sys::Win32::{Foundation::{CloseHandle,GetLastError},System::Threading::{OpenProcess,WaitForSingleObject},UI::WindowsAndMessaging::{MessageBoxW,MB_ICONERROR,MB_OK}};
 #[allow(dead_code)]#[path="design.rs"]mod design;
+#[allow(dead_code)]#[path="i18n.rs"]mod i18n;
 #[derive(Clone)]struct Config{pid:u32,installer:PathBuf,root:PathBuf,hash:String}
 #[derive(Clone)]struct Status{fraction:f32,label:String,error:String,done:bool}
 fn verify(installer:&Path,root:&Path,expected:&str)->Result<(),String>{
@@ -31,18 +32,21 @@ impl eframe::App for Updater{
   self.frames+=1;if self.frames==3{let _=fs::write(self.config.root.join("data/updates/runner-ready.json"),format!("{{\"owner_pid\":{}}}",self.config.pid));}
   let status=self.state.lock().unwrap().clone();if ctx.input(|i|i.viewport().close_requested())&&!self.allow_close{ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);}
   egui::CentralPanel::default().frame(egui::Frame::new().fill(design::BACKGROUND()).inner_margin(28)).show(ctx,|ui|{ui.vertical_centered(|ui|{
-   ui.add_space(10.);ui.add(egui::Image::new(egui::include_image!("../assets/logo.png")).fit_to_exact_size(egui::Vec2::splat(90.)));ui.add_space(12.);ui.heading("Swap Prism");ui.add_space(12.);ui.label(&status.label);ui.add_space(12.);ui.add(egui::ProgressBar::new(status.fraction).desired_width(440.).show_percentage());ui.add_space(12.);
-   if status.error.is_empty(){ui.label("Tus selecciones y copias se conservan.");}else{ui.label(egui::RichText::new(&status.error).color(design::RED()));if ui.button("Reabrir Swap Prism").clicked(){let _=Command::new(self.config.root.join("Swap Prism.exe")).spawn();self.allow_close=true;ctx.send_viewport_cmd(egui::ViewportCommand::Close);}if ui.button("Cerrar").clicked(){self.allow_close=true;ctx.send_viewport_cmd(egui::ViewportCommand::Close);}}
+   ui.add_space(10.);ui.add(egui::Image::new(egui::include_image!("../assets/logo.png")).fit_to_exact_size(egui::Vec2::splat(90.)));ui.add_space(12.);ui.heading("Swap Prism");ui.add_space(12.);ui.label(i18n::tr(&status.label));ui.add_space(12.);ui.add(egui::ProgressBar::new(status.fraction).desired_width(440.).show_percentage());ui.add_space(12.);
+   if status.error.is_empty(){ui.label(i18n::t("Tus selecciones y copias se conservan."));}else{ui.label(egui::RichText::new(i18n::tr(&status.error)).color(design::RED()));if ui.button(i18n::t("Reabrir Swap Prism")).clicked(){let _=Command::new(self.config.root.join("Swap Prism.exe")).spawn();self.allow_close=true;ctx.send_viewport_cmd(egui::ViewportCommand::Close);}if ui.button(i18n::t("Cerrar")).clicked(){self.allow_close=true;ctx.send_viewport_cmd(egui::ViewportCommand::Close);}}
   });});if status.done{self.allow_close=true;ctx.send_viewport_cmd(egui::ViewportCommand::Close);}ctx.request_repaint_after(Duration::from_millis(100));
  }
 }
 fn run()->Result<(),String>{
- let args:Vec<_>=std::env::args_os().collect();if args.len()!=6||args[1]!="--install"{return Err("Este componente se abre desde Actualizaciones de Swap Prism.".into());}
+ let args:Vec<_>=std::env::args_os().collect();
+ // Same language as the app: its saved choice, else Windows'.
+ if let Some(root)=args.get(4){let saved=fs::read_to_string(Path::new(root).join("data/settings.json")).ok().and_then(|t|serde_json::from_str::<serde_json::Value>(&t).ok()).and_then(|v|v["language"].as_str().map(str::to_owned));i18n::set_english(match saved{Some(code)=>code=="en",None=>!i18n::system_is_spanish()});}
+ if args.len()!=6||args[1]!="--install"{return Err("Este componente se abre desde Actualizaciones de Swap Prism.".into());}
  let config=Config{pid:args[2].to_str().and_then(|s|s.parse::<u32>().ok()).filter(|n|*n>0).ok_or("Proceso no válido.")?,installer:PathBuf::from(&args[3]),root:PathBuf::from(&args[4]),hash:args[5].to_str().ok_or("SHA-256 no válido.")?.into()};
- let logo=image::load_from_memory(include_bytes!("../assets/logo.png")).map_err(|e|e.to_string())?.into_rgba8();let(width,height)=logo.dimensions();let options=eframe::NativeOptions{viewport:egui::ViewportBuilder::default().with_title("Swap Prism · Actualizando").with_inner_size([540.,410.]).with_resizable(false).with_icon(egui::IconData{rgba:logo.into_raw(),width,height}),..Default::default()};
+ let logo=image::load_from_memory(include_bytes!("../assets/logo.png")).map_err(|e|e.to_string())?.into_rgba8();let(width,height)=logo.dimensions();let options=eframe::NativeOptions{viewport:egui::ViewportBuilder::default().with_title(i18n::t("Swap Prism · Actualizando")).with_inner_size([540.,410.]).with_resizable(false).with_icon(egui::IconData{rgba:logo.into_raw(),width,height}),..Default::default()};
  eframe::run_native("Swap Prism · Actualizando",options,Box::new(move|cc|{design::setup(&cc.egui_ctx);egui_extras::install_image_loaders(&cc.egui_ctx);let state=Arc::new(Mutex::new(Status{fraction:0.,label:"Preparando la actualización…".into(),error:String::new(),done:false}));let copy=state.clone();let context=cc.egui_ctx.clone();let task=config.clone();std::thread::spawn(move||{if let Err(error)=install(&task,&copy,&context){let _=fs::write(task.root.join("data/updates/update-error.txt"),&error);let mut s=copy.lock().unwrap();s.label="No se pudo completar la actualización".into();s.error=error;context.request_repaint();}});Ok(Box::new(Updater{config,state,frames:0,allow_close:false}))})).map_err(|e|e.to_string())
 }
-fn main(){if let Err(error)=run(){let text:Vec<u16>=format!("No se pudo abrir el actualizador.\n\n{error}").encode_utf16().chain(Some(0)).collect();let title:Vec<u16>="Swap Prism · Actualización".encode_utf16().chain(Some(0)).collect();unsafe{MessageBoxW(std::ptr::null_mut(),text.as_ptr(),title.as_ptr(),MB_OK|MB_ICONERROR);}}}
+fn main(){if let Err(error)=run(){let text:Vec<u16>=i18n::tr(&format!("No se pudo abrir el actualizador.\n\n{error}")).encode_utf16().chain(Some(0)).collect();let title:Vec<u16>=i18n::t("Swap Prism · Actualización").encode_utf16().chain(Some(0)).collect();unsafe{MessageBoxW(std::ptr::null_mut(),text.as_ptr(),title.as_ptr(),MB_OK|MB_ICONERROR);}}}
 #[cfg(test)]mod tests{use super::*;
  #[test]fn rejects_wrong_hash_and_outside_path(){let root=std::env::temp_dir().join(format!("swapprism-runner-{}",std::process::id()));fs::create_dir_all(root.join("data/updates")).unwrap();let path=root.join("data/updates/Swap Prism-Setup.exe");fs::write(&path,b"installer").unwrap();assert!(verify(&path,&root,&"0".repeat(64)).is_err());let hash=format!("{:x}",Sha256::digest(b"installer"));assert!(verify(&path,&root,&hash).is_ok());let other=root.join("other.exe");fs::write(&other,b"installer").unwrap();assert!(verify(&other,&root,&hash).is_err());fs::remove_dir_all(root).unwrap();}
 }

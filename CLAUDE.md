@@ -3,7 +3,7 @@
 App de Windows para personalizar Rocket League **en local**: skins, texturas, sonidos,
 perfil (nombre/avatar/títulos), fake rank, mapas de Workshop, overlay de FPS y pestaña de Tracker.
 Todo se hace editando los paquetes del juego (`.upk`, `.bnk`) con copia de seguridad y restauración byte a byte.
-Versión actual: **0.32.0** (`app/Cargo.toml`). Repo: https://github.com/damobeixon12/Swap-Prism
+Versión actual: **0.34.0** (`app/Cargo.toml`). Repo: https://github.com/damobeixon12/Swap-Prism
 (el código está en la rama main desde la 0.31.0).
 
 Creada originalmente con Codex. El 25/11/2026 se reorganizó entera (ver «Estado de la reorganización»).
@@ -26,6 +26,11 @@ El motor Python antiguo (engine/, PyInstaller) sigue en `main` y en la etiqueta 
   `apply.rs`, `jobs.rs` (catálogo embebido), `colors.rs`, `textures.rs`/`dxt.rs`, `body.rs`, `display.rs`/`hud.rs` (ActionScript),
   `profile.rs`, `studio.rs` (Wwise, MP3 con Media Foundation), `workshop.rs`, `media.rs`, `save.rs`/`game_settings.rs`, `epic.rs`, `launcher.rs`.
 - `build_tool.rs`: herramienta de compilación `swapprism-build` (sustituye a los .ps1/.py).
+- `extras.rs` (Ctrl+K, favoritos, conjuntos, aplicar al cerrar, volver a poner tras actualizar), `assist.rs` (guía, novedades,
+  arrastrar y soltar, skin en grande, tamaño, bandeja/inicio con Windows, espacio), `engine/storage.rs`.
+- **Idioma** (`i18n.rs` + `app/assets/i18n/en.json`): el español es el texto base en el código. Todo texto nuevo visible va
+  con `crate::i18n::t("…")` (o `tr(&format!(…))`) y su inglés en `en.json`; si falta, se ve en español.
+  `design.rs` y `platform.rs` los comparten el actualizador/editor: ahí se traduce con `crate::design::tr`.
 
 ## Estructura
 
@@ -65,5 +70,5 @@ scripts\swapprism-build.cmd release            # lo que hace Preparar update.cmd
 
 Ver `docs/PENDIENTES.md`. Resumen:
 - Sin confirmar en juego: fake rank (MMR 1600), color del flip reset, nombre al marcar, cambio de modelo (Body), reinicio del actualizador 0.29.0→0.29.1.
-- Descartado por el usuario: ping/MMR reales en el overlay, Auto GG, texto «BOOM» de Air Strike. Siguiente: app en inglés (0.34.0).
+- Descartado por el usuario: ping/MMR reales en el overlay, Auto GG, texto «BOOM» de Air Strike. App en inglés hecha en 0.34.0.
 - Lecciones técnicas (sonido de poste, boostmeter x4, logo `img://`, overlay transparente, PresentMon) también en `docs/PENDIENTES.md`.

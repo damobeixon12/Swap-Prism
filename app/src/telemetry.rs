@@ -76,7 +76,7 @@ impl Controller {
             let mut r = self.reading.lock().unwrap();
             r.fps = None;
             r.updated = None;
-            r.status = "Desactivado".into();
+            r.status = crate::i18n::t("Desactivado").into();
         }
     }
     pub fn snapshot(&self) -> Reading {
@@ -93,10 +93,10 @@ impl Drop for Controller {
 }
 
 pub fn verify_tool(path: &Path) -> Result<(), String> {
-    let bytes = fs::read(path).map_err(|e| format!("No se encuentra el medidor de FPS: {e}"))?;
+    let bytes = fs::read(path).map_err(|e| crate::i18n::tr(&format!("No se encuentra el medidor de FPS: {e}")))?;
     if format!("{:x}", Sha256::digest(bytes)) != PRESENTMON_SHA256 {
         return Err(
-            "El medidor de FPS no coincide con su versión verificada. Reinstala SWAPPRISM.".into(),
+            crate::i18n::t("El medidor de FPS no coincide con su versión verificada. Reinstala SWAPPRISM.").into(),
         );
     }
     Ok(())
@@ -194,7 +194,7 @@ fn supervise(
             r.fps = None;
             r.updated = None;
             r.pid = None;
-            r.status = "Esperando a Rocket League".into();
+            r.status = crate::i18n::t("Esperando a Rocket League").into();
             drop(r);
             thread::sleep(Duration::from_millis(500));
             continue;
@@ -210,7 +210,7 @@ fn supervise(
             *r = Reading {
                 pid: Some(pid),
                 generation,
-                status: "Esperando fotogramas del juego".into(),
+                status: crate::i18n::t("Esperando fotogramas del juego").into(),
                 ..Default::default()
             };
         }
@@ -218,7 +218,7 @@ fn supervise(
         let mut child = match command(&tool, pid).spawn() {
             Ok(child) => child,
             Err(error) => {
-                shared.lock().unwrap().status = format!("No se pudo iniciar el medidor: {error}");
+                shared.lock().unwrap().status = crate::i18n::tr(&format!("No se pudo iniciar el medidor: {error}"));
                 thread::sleep(Duration::from_secs(2));
                 continue;
             }
@@ -241,7 +241,7 @@ fn supervise(
                         }
                         r.fps = Some(fps);
                         r.updated = Some(Instant::now());
-                        r.status = "FPS del juego · PresentMon".into();
+                        r.status = crate::i18n::t("FPS del juego · PresentMon").into();
                         drop(r);
                         paint.request_repaint();
                         paint.request_repaint_of(egui::ViewportId::from_hash_of("swapprism-metrics"));
@@ -274,9 +274,9 @@ fn supervise(
             r.fps = None;
             r.updated = None;
             r.status = if let Some(code) = failed {
-                format!("El medidor se detuvo (código {code}).")
+                crate::i18n::tr(&format!("El medidor se detuvo (código {code})."))
             } else {
-                "Esperando a Rocket League".into()
+                crate::i18n::t("Esperando a Rocket League").into()
             };
         }
         stop_session(&tool, pid);

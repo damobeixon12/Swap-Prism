@@ -26,7 +26,7 @@ impl App{
     pub fn save_studio_draft(&self){if self.design_dir.is_none(){let _=fs::write(self.root.join("data/studio-draft.json"),serde_json::to_vec_pretty(&self.studio_draft).unwrap());}}
     pub fn studio_editor(&mut self,ui:&mut egui::Ui){
         if self.studio_tab==1{
-            ui.horizontal(|ui|{ui.selectable_value(&mut self.sound_browser,1,"Mi biblioteca");ui.selectable_value(&mut self.sound_browser,0,"Actual");ui.selectable_value(&mut self.sound_browser,2,"Descargar");});
+            ui.horizontal(|ui|{ui.selectable_value(&mut self.sound_browser,1,crate::i18n::t("Mi biblioteca"));ui.selectable_value(&mut self.sound_browser,0,crate::i18n::t("Actual"));ui.selectable_value(&mut self.sound_browser,2,crate::i18n::t("Descargar"));});
             if self.sound_browser==1{self.sound_library(ui);return;}
             if self.sound_browser==2{self.media_panel(ui,true);return;}
         }
@@ -39,12 +39,12 @@ impl App{
             match self.studio_tab {
                 0=>{
                     
-                    let mut enabled=self.studio_draft["palette"]["enabled"]==true;crate::design::toggle(ui,&mut enabled,"Usar más colores en el garaje");self.studio_draft["palette"]["enabled"]=json!(enabled);
-                    ui.horizontal_wrapped(|ui|{for(key,label)in [("blue","Equipo azul · primario"),("orange","Equipo naranja · primario"),("accent","Acento · ambos equipos")]{if ui.selectable_label(self.studio_palette==key,label).clicked(){self.studio_palette=key.into();self.studio_slot=0;}}});
+                    let mut enabled=self.studio_draft["palette"]["enabled"]==true;crate::design::toggle(ui,&mut enabled,crate::i18n::t("Usar más colores en el garaje"));self.studio_draft["palette"]["enabled"]=json!(enabled);
+                    ui.horizontal_wrapped(|ui|{for(key,label)in [("blue",crate::i18n::t("Equipo azul · primario")),("orange",crate::i18n::t("Equipo naranja · primario")),("accent",crate::i18n::t("Acento · ambos equipos"))]{if ui.selectable_label(self.studio_palette==key,label).clicked(){self.studio_palette=key.into();self.studio_slot=0;}}});
                     let key=self.studio_palette.clone();let columns=if key=="accent"{15}else{10};
                     if self.studio_draft["palette"][&key].as_array().map(|v|v.len())!=Some(columns*7){self.studio_draft["palette"][&key]=json!(rich_colors(columns));}
                     d::card().show(ui,|ui|{
-                        d::eyebrow(ui,"ELIGE UN COLOR PARA EDITARLO",d::CYAN());
+                        d::eyebrow(ui,crate::i18n::t("ELIGE UN COLOR PARA EDITARLO"),d::CYAN());
                         let colors=self.studio_draft["palette"][&key].as_array().cloned().unwrap_or_default();
                         let size=((ui.available_width()-(columns-1)as f32*5.)/columns as f32).min(27.).max(15.);
                         ui.spacing_mut().item_spacing=Vec2::splat(5.);
@@ -52,15 +52,15 @@ impl App{
                         for row in 0..7{ui.horizontal(|ui|{for col in 0..columns{let i=row*columns+col;let c=color(colors[i].as_str().unwrap_or("#FFFFFF"));let(r,response)=ui.allocate_exact_size(Vec2::splat(size),egui::Sense::click());ui.painter().rect_filled(r,5,c);if self.studio_slot==i{ui.painter().rect_stroke(r.expand(2.),6,egui::Stroke::new(2_f32,d::TEXT()),egui::StrokeKind::Outside);}if response.clicked(){self.studio_slot=i;}}});}
                         ui.spacing_mut().interact_size.y=38.;
                         ui.add_space(14.);let mut c=color(colors[self.studio_slot].as_str().unwrap_or("#FFFFFF"));let mut channels=[c.r(),c.g(),c.b()];
-                        ui.horizontal(|ui|{ui.label(format!("Casilla {}",self.studio_slot+1));if ui.color_edit_button_srgb(&mut channels).changed(){c=Color32::from_rgb(channels[0],channels[1],channels[2]);self.studio_draft["palette"][&key][self.studio_slot]=json!(hex(c));}ui.label(hex(c));});
-                        if ui.button("Restablecer este panel a Rich").clicked(){self.studio_draft["palette"][&key]=json!(rich_colors(columns));}
+                        ui.horizontal(|ui|{ui.label(crate::i18n::tr(&format!("Casilla {}",self.studio_slot+1)));if ui.color_edit_button_srgb(&mut channels).changed(){c=Color32::from_rgb(channels[0],channels[1],channels[2]);self.studio_draft["palette"][&key][self.studio_slot]=json!(hex(c));}ui.label(hex(c));});
+                        if ui.button(crate::i18n::t("Restablecer este panel a Rich")).clicked(){self.studio_draft["palette"][&key]=json!(rich_colors(columns));}
                     });
-                    d::muted(ui,"En el juego, desactiva «Forzar colores predeterminados» para verlos.");
+                    d::muted(ui,crate::i18n::t("En el juego, desactiva «Forzar colores predeterminados» para verlos."));
                 },
                 1=>{
                     let specs:Value=serde_json::from_slice(include_bytes!("../assets/audio_manifest.json")).unwrap();
                     let kind=if self.studio_sound_kind=="post"{"post"}else{"reset"};
-                    let label=if kind=="post"{"Poste y travesaño"}else{"Flip reset"};
+                    let label=if kind=="post"{crate::i18n::t("Poste y travesaño")}else{"Flip reset"};
                     let limit=specs[kind]["max_seconds"].as_f64().unwrap_or(0.0)as f32;
                     let allowed=specs[kind]["disabled_reason"].is_null();
                     if let Some(reason)=specs[kind]["disabled_reason"].as_str(){d::muted(ui,reason);ui.add_space(8.);}
@@ -82,12 +82,12 @@ impl App{
                                 let c=b.center();
                                 if playing{for dx in [-6.,6.]{ui.painter().rect_filled(egui::Rect::from_center_size(c+Vec2::new(dx,0.),Vec2::new(6.,20.)),2,d::ON_ACCENT());}}
                                 else{ui.painter().add(egui::Shape::convex_polygon(vec![c+Vec2::new(-6.,-11.),c+Vec2::new(12.,0.),c+Vec2::new(-6.,11.)],d::ON_ACCENT(),egui::Stroke::NONE));}
-                                if resp.on_hover_cursor(egui::CursorIcon::PointingHand).on_hover_text("Escuchar").clicked()&&!self.busy{play=true;}
+                                if resp.on_hover_cursor(egui::CursorIcon::PointingHand).on_hover_text(crate::i18n::t("Escuchar")).clicked()&&!self.busy{play=true;}
                                 ui.add_space(12.);
                                 ui.vertical(|ui|{
                                     let mut name=s(&selected,"name").to_owned();
                                     if ui.add(egui::TextEdit::singleline(&mut name).frame(false).font(d::bold(18.)).hint_text(label).char_limit(64).desired_width(f32::INFINITY)).changed(){self.studio_draft["sounds"][kind]["name"]=json!(name);}
-                                    d::muted(ui,format!("{:.1} s de {:.1} s",end-start,total));
+                                    d::muted(ui,crate::i18n::tr(&format!("{:.1} s de {:.1} s",end-start,total)));
                                 });
                             });
                             ui.add_space(16.);
@@ -107,7 +107,7 @@ impl App{
                             if let Some((playing,began,length))=&self.audio_preview{if playing==kind{ui.ctx().request_repaint_after(Duration::from_millis(16));let elapsed=began.elapsed().as_secs_f32().min(*length);let xx=x(start+elapsed);ui.painter().line_segment([egui::pos2(xx,r.top()),egui::pos2(xx,r.bottom())],egui::Stroke::new(2_f32,d::TEXT()));}}
                             ui.add_space(18.);
                             ui.horizontal(|ui|{
-                                ui.label(RichText::new("Volumen").color(d::MUTED()));
+                                ui.label(RichText::new(crate::i18n::t("Volumen")).color(d::MUTED()));
                                 ui.spacing_mut().slider_width=(ui.available_width()-70.).max(80.);
                                 if ui.add(egui::Slider::new(&mut volume,0.0..=if kind=="post"{2.0}else{1.0}).show_value(false)).changed(){volume_changed=true;}
                                 ui.label(RichText::new(format!("{} %",(volume*100.).round()as u32)).strong());
@@ -118,8 +118,8 @@ impl App{
                         if play{self.audio_preview=Some((kind.to_owned(),Instant::now(),end-start));self.call("sound_preview",json!({"action":"sound_preview","path":selected["path"],"volume":volume,"start":start,"end":end}));}
                         ui.add_space(14.);
                         ui.horizontal(|ui|{
-                            if ui.add_enabled(!self.busy&&allowed,d::primary("Cambiar sonido")).clicked(){pick=true;}
-                            if ui.add_enabled(!self.busy,d::button("Volver al original",d::MUTED())).clicked(){self.studio_draft["sounds"][kind]=Value::Null;}
+                            if ui.add_enabled(!self.busy&&allowed,d::primary(crate::i18n::t("Cambiar sonido"))).clicked(){pick=true;}
+                            if ui.add_enabled(!self.busy,d::button(crate::i18n::t("Volver al original"),d::MUTED())).clicked(){self.studio_draft["sounds"][kind]=Value::Null;}
                         });
                     }else{
                         d::card().show(ui,|ui|{ui.vertical_centered(|ui|{
@@ -129,9 +129,9 @@ impl App{
                             crate::icons::paint(ui,egui::Rect::from_center_size(r.center(),Vec2::splat(26.)),"sonido del reset",d::GREEN());
                             ui.add_space(12.);
                             ui.label(RichText::new(label).font(d::bold(19.)));
-                            d::muted(ui,format!("Sonido original del juego. Usa un MP3 tuyo (hasta {:.1} s).",limit));
+                            d::muted(ui,crate::i18n::tr(&format!("Sonido original del juego. Usa un MP3 tuyo (hasta {:.1} s).",limit)));
                             ui.add_space(14.);
-                            if ui.add_enabled(!self.busy&&allowed,d::primary("Elegir MP3")).clicked(){pick=true;}
+                            if ui.add_enabled(!self.busy&&allowed,d::primary(crate::i18n::t("Elegir MP3"))).clicked(){pick=true;}
                             ui.add_space(22.);
                         });});
                     }
@@ -144,7 +144,7 @@ impl App{
                     const PRESETS:[[u8;3];10]=[[226,75,74],[239,159,39],[250,220,80],[151,196,89],[93,202,165],[55,138,221],[127,119,221],[212,83,126],[240,240,240],[30,30,34]];
                     ui.columns(2,|cols|{
                         let ui=&mut cols[0];
-                        crate::design::toggle(ui,&mut enabled,"Usar mi color");
+                        crate::design::toggle(ui,&mut enabled,crate::i18n::t("Usar mi color"));
                         ui.add_space(14.);
                         for row in PRESETS.chunks(5){
                             ui.horizontal(|ui|{ui.spacing_mut().item_spacing.x=10.;for p in row{
@@ -155,26 +155,26 @@ impl App{
                             }});
                             ui.add_space(10.);
                         }
-                        ui.horizontal(|ui|{if ui.color_edit_button_srgb(&mut rgb).changed(){enabled=true;}d::muted(ui,"Otro color");});
+                        ui.horizontal(|ui|{if ui.color_edit_button_srgb(&mut rgb).changed(){enabled=true;}d::muted(ui,crate::i18n::t("Otro color"));});
                         let ui=&mut cols[1];
                         let(r,_)=ui.allocate_exact_size(Vec2::new(ui.available_width(),230.),egui::Sense::hover());
                         ui.painter().rect_filled(r,14,d::BACKGROUND());
                         let shown=if enabled{Color32::from_rgb(rgb[0],rgb[1],rgb[2])}else{d::CYAN()};
                         let center=r.center()-Vec2::new(0.,14.);
                         for i in (1..=5).rev(){ui.painter().circle_stroke(center,24.+i as f32*9.,egui::Stroke::new(3_f32,shown.gamma_multiply(1./i as f32)));}
-                        ui.painter().text(egui::pos2(r.center().x,r.bottom()-20.),egui::Align2::CENTER_CENTER,if enabled{"Así se verá en el juego"}else{"Color original"},egui::FontId::proportional(13.),d::MUTED());
+                        ui.painter().text(egui::pos2(r.center().x,r.bottom()-20.),egui::Align2::CENTER_CENTER,if enabled{crate::i18n::t("Así se verá en el juego")}else{crate::i18n::t("Color original")},egui::FontId::proportional(13.),d::MUTED());
                     });
                     self.studio_draft["reset_enabled"]=json!(enabled);
                     self.studio_draft["reset_color"]=json!(hex(Color32::from_rgb(rgb[0],rgb[1],rgb[2])));
                     ui.add_space(12.);
-                    d::muted(ui,"En Rocket League deja activados los efectos del flip reset.");
+                    d::muted(ui,crate::i18n::t("En Rocket League deja activados los efectos del flip reset."));
                 },
                 _=>{
                     
                     d::card().show(ui,|ui|{
-                        let mut enabled=self.studio_draft["season_enabled"]==true;crate::design::toggle(ui,&mut enabled,"Usar diseño Swap Prism");self.studio_draft["season_enabled"]=json!(enabled);
+                        let mut enabled=self.studio_draft["season_enabled"]==true;crate::design::toggle(ui,&mut enabled,crate::i18n::t("Usar diseño Swap Prism"));self.studio_draft["season_enabled"]=json!(enabled);
                         let mut season=self.studio_draft["season"].as_u64().unwrap_or(24)as u32;
-                        ui.horizontal(|ui|{ui.label("Temporada del diseño");ui.add(egui::DragValue::new(&mut season).range(1..=999));});self.studio_draft["season"]=json!(season);
+                        ui.horizontal(|ui|{ui.label(crate::i18n::t("Temporada del diseño"));ui.add(egui::DragValue::new(&mut season).range(1..=999));});self.studio_draft["season"]=json!(season);
                         let(r,_)=ui.allocate_exact_size(Vec2::new(ui.available_width(),190.),egui::Sense::hover());ui.painter().rect_filled(r,12,d::BACKGROUND());
                         let logo=egui::Rect::from_center_size(r.center()-Vec2::new(0.,30.),Vec2::splat(72.));egui::Image::new(egui::include_image!("../assets/logo.png")).paint_at(ui,logo);
                         ui.painter().text(r.center()+Vec2::new(0.,24.),egui::Align2::CENTER_CENTER,"SWAP PRISM × ROCKET LEAGUE",egui::FontId::proportional(18.),d::CYAN());
@@ -185,8 +185,8 @@ impl App{
         });
         ui.add_space(10.);ui.horizontal_wrapped(|ui|{
             
-            if ui.add_enabled(!self.busy,d::button("Quitar personalización",d::RED())).clicked(){self.studio_draft=json!({});}
-            if self.running{d::muted(ui,"Puedes elegir ahora y aplicar al cerrar Rocket League.");}
+            if ui.add_enabled(!self.busy,d::button(crate::i18n::t("Quitar personalización"),d::RED())).clicked(){self.studio_draft=json!({});}
+            if self.running{d::muted(ui,crate::i18n::t("Puedes elegir ahora y aplicar al cerrar Rocket League."));}
         });
         if self.studio_draft!=before{self.save_studio_draft();}
     }

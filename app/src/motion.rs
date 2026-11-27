@@ -12,7 +12,7 @@ impl App{
             let quiet=self.queue_flights.last().map(|(time,_,_)|time.elapsed().as_millis()>350).unwrap_or(true);
             if !self.queue_visual_fingerprint.is_empty()&&changed&&quiet&&self.design_dir.is_none(){
                 let origin=ctx.input(|i|i.pointer.interact_pos()).unwrap_or(ctx.screen_rect().center());
-                let label=new_plan.unwrap_or_else(||if profile_changed{"Perfil y título".into()}else{"Personalización".into()});
+                let label=new_plan.unwrap_or_else(||if profile_changed{crate::i18n::t("Perfil y título").into()}else{"Personalización".into()});
                 self.queue_flights.push((Instant::now(),origin,label));
             }
             self.queue_visual_fingerprint=fingerprint;

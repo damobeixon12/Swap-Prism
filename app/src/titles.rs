@@ -8,24 +8,24 @@ fn hex(c:Color32)->String{format!("#{:02X}{:02X}{:02X}",c.r(),c.g(),c.b())}
 
 impl App {
     pub(super) fn title_editor(&mut self,ui:&mut egui::Ui){
-        ui.horizontal_wrapped(|ui|{for(i,label)in ["Títulos","Personalizados","Título activo"].iter().enumerate(){if ui.selectable_label(self.title_page==i,*label).clicked(){self.title_page=i;}}});
+        ui.horizontal_wrapped(|ui|{for(i,label)in [crate::i18n::t("Títulos"),crate::i18n::t("Personalizados"),crate::i18n::t("Título activo")].iter().enumerate(){if ui.selectable_label(self.title_page==i,*label).clicked(){self.title_page=i;}}});
         ui.add_space(14.);
         if self.title_page==1 {self.title_custom_editor(ui);return;}
         if self.title_page==2 {
-            ui.heading("Tu título activo");
+            ui.heading(crate::i18n::t("Tu título activo"));
             let current=self.profile_state["settings"]["title"].clone();
             d::card().show(ui,|ui|{
                 if current.is_object(){
                     ui.label(RichText::new(s(&current,"text")).size(24.).strong().color(rgb(s(&current,"color"))));
-                    d::muted(ui,format!("Reemplaza: {}",s(&current,"target")));
-                    if ui.button("Editar este título").clicked(){self.title_draft=current.clone();self.title_page=1;}
-                    if ui.add_enabled(!self.busy,d::button("Revertir título",d::RED())).clicked(){self.title_apply(Value::Null);}
-                }else{d::muted(ui,"Estás usando tu título original.");}
+                    d::muted(ui,crate::i18n::tr(&format!("Reemplaza: {}",s(&current,"target"))));
+                    if ui.button(crate::i18n::t("Editar este título")).clicked(){self.title_draft=current.clone();self.title_page=1;}
+                    if ui.add_enabled(!self.busy,d::button(crate::i18n::t("Revertir título"),d::RED())).clicked(){self.title_apply(Value::Null);}
+                }else{d::muted(ui,crate::i18n::t("Estás usando tu título original."));}
             });return;
         }
-        ui.heading("Estilos de títulos");
-        d::muted(ui,"Elige el color y el resplandor. Los textos de estas tarjetas son ejemplos de acabado, no tu inventario.");
-        ui.add_space(12.);d::search(ui,&mut self.title_query,"Buscar un estilo…");
+        ui.heading(crate::i18n::t("Estilos de títulos"));
+        d::muted(ui,crate::i18n::t("Elige el color y el resplandor. Los textos de estas tarjetas son ejemplos de acabado, no tu inventario."));
+        ui.add_space(12.);d::search(ui,&mut self.title_query,crate::i18n::t("Buscar un estilo…"));
         let styles=[("DEVELOPER","#00F0BB","#00CFA0"),("PSYONIX HACKATHON WINNER","#00F0BB","#00CFA0"),("RIVAL SERIES ANALYST","#00F0BB","#00CFA0"),("RLCS ANALYST","#00F0BB","#00CFA0"),("SLEEPER BUILD","#00F0BB","#00CFA0"),("STYLE ICON","#00F0BB","#00CFA0"),("S23 2V2 GLOBAL #1","#FFD282","#D29240"),("S23 3V3 GLOBAL #1","#FFD282","#D29240"),("S23 2V2 TOP 10","#FFE4F3","#E5ACD0"),("S23 2V2 TOP 25","#FFE4F3","#E5ACD0"),("GRAND CHAMPION","#FF3030","#FF0000"),("SUPERSONIC LEGEND","#FFFFFF","#FFFFFF")];
         let query=self.title_query.to_lowercase();let filtered:Vec<_>=styles.into_iter().filter(|v|v.0.to_lowercase().contains(&query)).collect();
         egui::ScrollArea::vertical().id_salt("title-styles").show(ui,|ui|{
@@ -52,13 +52,13 @@ impl App {
         self.queue_profile(settings);
     }
     pub(super) fn title_custom_editor(&mut self,ui:&mut egui::Ui){
-        ui.heading("Títulos personalizados");
-        d::muted(ui,"Tu palabra, tu color y tu resplandor. Un swap visual sobre uno de tus títulos.");
+        ui.heading(crate::i18n::t("Títulos personalizados"));
+        d::muted(ui,crate::i18n::t("Tu palabra, tu color y tu resplandor. Un swap visual sobre uno de tus títulos."));
         ui.add_space(16.);
         let mut changed=false;
         egui::ScrollArea::vertical().id_salt("title-editor").max_height((ui.available_height()-64.).max(120.)).show(ui,|ui|{
             d::card().inner_margin(24).show(ui,|ui|{
-                d::eyebrow(ui,"VISTA PREVIA ORIENTATIVA",d::PURPLE());
+                d::eyebrow(ui,crate::i18n::t("VISTA PREVIA ORIENTATIVA"),d::PURPLE());
                 let text=s(&self.title_draft,"text").to_uppercase();
                 let color=rgb(s(&self.title_draft,"color"));let color2=rgb(s(&self.title_draft,"color2"));let glow=rgb(s(&self.title_draft,"glow"));
                 let (rect,_)=ui.allocate_exact_size(Vec2::new(ui.available_width(),90.),egui::Sense::hover());
@@ -68,7 +68,7 @@ impl App {
                 if avatar.is_empty(){egui::Image::new(egui::include_image!("../assets/logo.png")).corner_radius(12).paint_at(ui,avatar_rect);}else{egui::Image::from_uri(format!("file://{avatar}")).corner_radius(12).paint_at(ui,avatar_rect);}
                 let alias=s(&self.profile_state["settings"],"name");let player=if alias.is_empty(){s(&self.snapshot,"player_name")}else{alias};
                 ui.painter().text(rect.min+Vec2::new(96.,20.),egui::Align2::LEFT_TOP,player,egui::FontId::proportional(21.),d::TEXT());
-                let title=if text.is_empty(){"TU TÍTULO"}else{&text};
+                let title=if text.is_empty(){crate::i18n::t("TU TÍTULO")}else{&text};
                 let mut font=egui::FontId::proportional(18.);
                 let mut galley=ui.painter().layout_no_wrap(title.to_owned(),font.clone(),color);
                 if galley.size().x>rect.width()-128.{font.size*=((rect.width()-128.)/galley.size().x).max(0.30);galley=ui.painter().layout_no_wrap(title.to_owned(),font.clone(),color);}
@@ -84,36 +84,36 @@ impl App {
             });
             ui.add_space(12.);
             d::card().inner_margin(20).show(ui,|ui|{
-                ui.label(RichText::new("Escribe lo que quieras").strong());
+                ui.label(RichText::new(crate::i18n::t("Escribe lo que quieras")).strong());
                 let mut text=s(&self.title_draft,"text").to_owned();
-                if ui.add(egui::TextEdit::singleline(&mut text).char_limit(48).hint_text("Ejemplo: SWAP PRISM ON TOP").desired_width(ui.available_width())).changed(){self.title_draft["text"]=json!(text);changed=true;}
+                if ui.add(egui::TextEdit::singleline(&mut text).char_limit(48).hint_text(crate::i18n::t("Ejemplo: SWAP PRISM ON TOP")).desired_width(ui.available_width())).changed(){self.title_draft["text"]=json!(text);changed=true;}
                 ui.horizontal_wrapped(|ui|{
-                    for(label,color,glow)in [("Verde","#75EAA6","#75EAA6"),("Rojo GC","#FF3030","#FF0000"),("Blanco SSL","#FFFFFF","#FFFFFF"),("Dorado","#FFD45A","#EAA52B"),("Cian","#68DAF9","#25BFE8")]{if ui.button(label).clicked(){self.title_draft["color"]=json!(color);self.title_draft["glow"]=json!(glow);self.title_draft["glow_enabled"]=json!(true);changed=true;}}
+                    for(label,color,glow)in [(crate::i18n::t("Verde"),"#75EAA6","#75EAA6"),(crate::i18n::t("Rojo GC"),"#FF3030","#FF0000"),(crate::i18n::t("Blanco SSL"),"#FFFFFF","#FFFFFF"),(crate::i18n::t("Dorado"),"#FFD45A","#EAA52B"),(crate::i18n::t("Cian"),"#68DAF9","#25BFE8")]{if ui.button(label).clicked(){self.title_draft["color"]=json!(color);self.title_draft["glow"]=json!(glow);self.title_draft["glow_enabled"]=json!(true);changed=true;}}
                 });
                 ui.horizontal_wrapped(|ui|{
-                    for(key,label)in [("color","Color"),("color2","Segundo color"),("glow","Resplandor")]{let c=rgb(s(&self.title_draft,key));let mut channels=[c.r(),c.g(),c.b()];ui.label(label);if ui.color_edit_button_srgb(&mut channels).changed(){self.title_draft[key]=json!(hex(Color32::from_rgb(channels[0],channels[1],channels[2])));changed=true;}}
+                    for(key,label)in [("color","Color"),("color2",crate::i18n::t("Segundo color")),("glow",crate::i18n::t("Resplandor"))]{let c=rgb(s(&self.title_draft,key));let mut channels=[c.r(),c.g(),c.b()];ui.label(label);if ui.color_edit_button_srgb(&mut channels).changed(){self.title_draft[key]=json!(hex(Color32::from_rgb(channels[0],channels[1],channels[2])));changed=true;}}
                 });
                 ui.horizontal_wrapped(|ui|{
                     let mut multi=self.title_draft["multicolor"]==true;let mut glowing=self.title_draft["glow_enabled"]!=false;
                     if crate::design::toggle(ui,&mut multi,"Multicolor").changed(){self.title_draft["multicolor"]=json!(multi);changed=true;}
-                    if crate::design::toggle(ui,&mut glowing,"Con resplandor").changed(){self.title_draft["glow_enabled"]=json!(glowing);changed=true;}
+                    if crate::design::toggle(ui,&mut glowing,crate::i18n::t("Con resplandor")).changed(){self.title_draft["glow_enabled"]=json!(glowing);changed=true;}
                 });
             });
             ui.add_space(12.);
             d::card().inner_margin(20).show(ui,|ui|{
-                ui.label(RichText::new("Base del título").strong());
+                ui.label(RichText::new(crate::i18n::t("Base del título")).strong());
                 let titles=self.snapshot["titles"].as_array().cloned().unwrap_or_default();
-                if let Some(t)=titles.iter().find(|t|t["equipped"]==true){if self.title_draft["target"]!=t["id"]{self.title_draft["target"]=t["id"].clone();changed=true;}d::muted(ui,"Se usa automáticamente tu título equipado. Las tarjetas de arriba solo eligen el acabado.");}
-                else{d::muted(ui,"Equipa cualquier título en Rocket League para utilizarlo como base del texto personalizado.");}
+                if let Some(t)=titles.iter().find(|t|t["equipped"]==true){if self.title_draft["target"]!=t["id"]{self.title_draft["target"]=t["id"].clone();changed=true;}d::muted(ui,crate::i18n::t("Se usa automáticamente tu título equipado. Las tarjetas de arriba solo eligen el acabado."));}
+                else{d::muted(ui,crate::i18n::t("Equipa cualquier título en Rocket League para utilizarlo como base del texto personalizado."));}
 
             });
         });
         ui.add_space(10.);
         ui.horizontal_wrapped(|ui|{
             let valid=!s(&self.title_draft,"text").trim().is_empty()&&!s(&self.title_draft,"target").is_empty();
-            if ui.add_enabled(!self.busy&&self.game.is_some()&&valid,d::button("Añadir título a cambios",d::GREEN())).clicked(){self.title_apply(self.title_draft.clone());}
-            if ui.add_enabled(!self.busy&&self.profile_state["settings"]["title"].is_object(),d::button("Revertir título",d::RED())).clicked(){self.title_apply(Value::Null);}
-            if self.running{d::muted(ui,"Cierra Rocket League para aplicar.");}
+            if ui.add_enabled(!self.busy&&self.game.is_some()&&valid,d::button(crate::i18n::t("Añadir título a cambios"),d::GREEN())).clicked(){self.title_apply(self.title_draft.clone());}
+            if ui.add_enabled(!self.busy&&self.profile_state["settings"]["title"].is_object(),d::button(crate::i18n::t("Revertir título"),d::RED())).clicked(){self.title_apply(Value::Null);}
+            if self.running{d::muted(ui,crate::i18n::t("Cierra Rocket League para aplicar."));}
         });
         if changed{let _=fs::write(self.root.join("data/title-draft.json"),serde_json::to_vec_pretty(&self.title_draft).unwrap());if !s(&self.title_draft,"text").trim().is_empty()&&!s(&self.title_draft,"target").is_empty(){self.title_apply(self.title_draft.clone());}}
     }

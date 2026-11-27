@@ -11,11 +11,11 @@ use std::{
 pub fn install_after_exit(installer:&Path,root:&Path,expected:&str)->Result<(),String>{
     use std::os::windows::process::CommandExt;
     let digest=format!("{:x}",Sha256::digest(fs::read(installer).map_err(|e|e.to_string())?));
-    if expected.len()!=64||digest!=expected.to_ascii_lowercase(){return Err("El instalador ya no coincide con la descarga verificada.".into());}
+    if expected.len()!=64||digest!=expected.to_ascii_lowercase(){return Err(crate::i18n::t("El instalador ya no coincide con la descarga verificada.").into());}
     let source=root.join("_engine/SWAPPRISMUpdate.exe");
     let helper=root.join("data/updates/SWAPPRISMUpdate.exe");
     let _=fs::remove_file(root.join("data/updates/runner-ready.json"));
-    fs::copy(source,&helper).map_err(|e|format!("Falta el lanzador de actualizaciones: {e}"))?;
+    fs::copy(source,&helper).map_err(|e|crate::i18n::tr(&format!("Falta el lanzador de actualizaciones: {e}")))?;
     std::process::Command::new(helper).arg("--install").arg(std::process::id().to_string())
         .arg(installer).arg(root).arg(expected).creation_flags(0x08000000)
         .spawn().map_err(|e|e.to_string())?;
@@ -42,10 +42,10 @@ pub fn validate(release: &Release, current: &str) -> Result<bool, String> {
             .to_ascii_lowercase()
             .ends_with(".exe")
     {
-        return Err("La descarga debe ser un instalador HTTPS sin credenciales en la URL.".into());
+        return Err(crate::i18n::t("La descarga debe ser un instalador HTTPS sin credenciales en la URL.").into());
     }
     if release.sha256.len() != 64 || !release.sha256.bytes().all(|b| b.is_ascii_hexdigit()) {
-        return Err("SHA-256 de actualización no válido.".into());
+        return Err(crate::i18n::t("SHA-256 de actualización no válido.").into());
     }
     Ok(new > old && new.pre.is_empty())
 }
@@ -63,29 +63,29 @@ fn get(url: &str) -> Result<ureq::Response, String> {
     let mut next = url.to_owned();
     for _ in 0..6 {
         if !next.starts_with("https://") || next.contains('@') {
-            return Err("La descarga requiere HTTPS en todos sus saltos.".into());
+            return Err(crate::i18n::t("La descarga requiere HTTPS en todos sus saltos.").into());
         }
         let response = client.get(&next).call().map_err(|e|match e{ureq::Error::Status(404,_)=>"HTTP 404".to_string(),other=>other.to_string()})?;
         if [301, 302, 303, 307, 308].contains(&response.status()) {
             next = response
                 .header("Location")
-                .ok_or("Redirección sin destino")?
+                .ok_or(crate::i18n::t("Redirección sin destino"))?
                 .to_owned();
             continue;
         }
         if response.status() != 200 {
-            return Err(format!("Respuesta HTTP inesperada: {}", response.status()));
+            return Err(crate::i18n::tr(&format!("Respuesta HTTP inesperada: {}", response.status())));
         }
         return Ok(response);
     }
-    Err("Demasiadas redirecciones de descarga.".into())
+    Err(crate::i18n::t("Demasiadas redirecciones de descarga.").into())
 }
 pub fn check(url: &str, current: &str) -> Result<Option<Release>, String> {
     if url.is_empty() {
         return Ok(None);
     }
     if !url.starts_with("https://") || url.contains('@') {
-        return Err("El manifiesto de actualización requiere HTTPS.".into());
+        return Err(crate::i18n::t("El manifiesto de actualización requiere HTTPS.").into());
     }
     let response = match get(url){Ok(v)=>v,Err(e) if e=="HTTP 404"&&url.starts_with("https://github.com/")&&url.ends_with("/releases/latest/download/update.json")=>return Ok(None),Err(e)=>return Err(e)};
     let mut bytes = Vec::new();
@@ -95,7 +95,7 @@ pub fn check(url: &str, current: &str) -> Result<Option<Release>, String> {
         .read_to_end(&mut bytes)
         .map_err(|e| e.to_string())?;
     if bytes.len() > 65536 {
-        return Err("Manifiesto demasiado grande.".into());
+        return Err(crate::i18n::t("Manifiesto demasiado grande.").into());
     }
     let release: Release = serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
     Ok(if validate(&release, current)? {
@@ -105,7 +105,7 @@ pub fn check(url: &str, current: &str) -> Result<Option<Release>, String> {
     })
 }
 pub fn download_progress(release:&Release,root:&Path,mut progress:impl FnMut(u64,Option<u64>))->Result<PathBuf,String>{
-    if !validate(release, env!("CARGO_PKG_VERSION"))?{return Err("Esta versión no es una actualización estable más reciente.".into());}
+    if !validate(release, env!("CARGO_PKG_VERSION"))?{return Err(crate::i18n::t("Esta versión no es una actualización estable más reciente.").into());}
     let dir = root.join("data/updates");
     fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     let path = dir.join("Swap Prism-Setup.download");
@@ -126,14 +126,14 @@ pub fn download_progress(release:&Release,root:&Path,mut progress:impl FnMut(u64
             total += n as u64;
             progress(total,expected);
             if total > 1024 * 1024 * 1024 {
-                return Err("Instalador demasiado grande.".into());
+                return Err(crate::i18n::t("Instalador demasiado grande.").into());
             }
             hash.update(&buffer[..n]);
             file.write_all(&buffer[..n]).map_err(|e| e.to_string())?;
         }
         file.sync_all().map_err(|e| e.to_string())?;
         if format!("{:x}", hash.finalize()) != release.sha256.to_ascii_lowercase() {
-            return Err("La descarga no coincide con el SHA-256 publicado. No se ejecuta.".into());
+            return Err(crate::i18n::t("La descarga no coincide con el SHA-256 publicado. No se ejecuta.").into());
         }
         drop(file);
         let final_path = dir.join("Swap Prism-Setup.exe");

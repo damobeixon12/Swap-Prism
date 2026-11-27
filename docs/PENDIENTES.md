@@ -14,9 +14,9 @@ Estado a 0.29.1. Detalle técnico de cada punto en `docs/historial/`.
 El usuario no quiere: ping y MMR reales en el overlay, Auto GG, texto «BOOM» naranja de Air Strike
 (investigado: material compartido `Boost_Tests.Materials.Boom_Text_MIC`).
 
-## Siguiente
+## Hecho
 
-- **App en inglés** (0.34.0): pasar todos los textos a un archivo de traducciones.
+- **App en inglés** (0.34.0): `i18n.rs` + `app/assets/i18n/en.json`. Idioma según Windows o Ajustes → Idioma.
 
 ## Lecciones que no hay que repetir
 

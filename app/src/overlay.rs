@@ -138,7 +138,7 @@ pub fn show_ranks(ctx: &egui::Context, preferences: &Preferences, board: Arc<Mut
                 });
             }
             if editing {
-                ui.label(RichText::new("Arrastra para mover").size(10.).color(design::MUTED()));
+                ui.label(RichText::new(crate::i18n::t("Arrastra para mover")).size(10.).color(design::MUTED()));
                 if ui.interact(ui.max_rect(), ui.id().with("drag"), egui::Sense::drag()).drag_started() {
                     ctx.send_viewport_cmd(egui::ViewportCommand::StartDrag);
                 }
@@ -291,7 +291,7 @@ pub fn show(
                     ui.label(RichText::new(format!("{} FPS",fps.map(|v|v.to_string()).unwrap_or("—".into()))).font(egui::FontId::proportional(size)).strong().color(color));
                     if editing {
                         ui.label(
-                            RichText::new("Arrastra para mover")
+                            RichText::new(crate::i18n::t("Arrastra para mover"))
                                 .size(10.)
                                 .color(design::MUTED()),
                         );
@@ -343,12 +343,12 @@ impl App {
             return;
         }
         if self.overlay_tab == 1 {
-            ui.heading("Mi MMR en el juego");
-            design::muted(ui,"Actívalo y listo: detecta tu cuenta y pone tu insignia y tu MMR encima del juego, sin fondo.");
+            ui.heading(crate::i18n::t("Mi MMR en el juego"));
+            design::muted(ui,crate::i18n::t("Actívalo y listo: detecta tu cuenta y pone tu insignia y tu MMR encima del juego, sin fondo."));
             ui.add_space(12.);
             design::card().show(ui,|ui|{
                 ui.horizontal_wrapped(|ui|{
-                    let mut changed=crate::design::toggle(ui,&mut self.overlay_preferences.rank,"Mostrar mi MMR en el juego").changed();
+                    let mut changed=crate::design::toggle(ui,&mut self.overlay_preferences.rank,crate::i18n::t("Mostrar mi MMR en el juego")).changed();
                     ui.add_space(18.);
                     for(id,label)in RANK_ROWS{
                         let mut on=self.overlay_preferences.rank_modes.contains(&id);
@@ -357,34 +357,34 @@ impl App {
                     if changed{self.save_overlay();}
                 });
                 ui.add_space(8.);
-                design::muted(ui,"Sale siempre que estás en el juego. El rango de todos aparece junto al marcador mientras mantienes su botón.");
+                design::muted(ui,crate::i18n::t("Sale siempre que estás en el juego. El rango de todos aparece junto al marcador mientras mantienes su botón."));
                 ui.add_space(8.);
                 ui.horizontal_wrapped(|ui|{
-                    ui.label("Dónde:");
+                    ui.label(crate::i18n::t("Dónde:"));
                     for(anchor,label)in RANK_ANCHORS{if ui.selectable_label(self.overlay_preferences.rank_anchor==anchor,label).clicked(){self.overlay_preferences.rank_anchor=anchor.into();self.save_overlay();}}
                     let editing=self.rank_placement.lock().unwrap().editing;
-                    if ui.selectable_label(editing||self.overlay_preferences.rank_anchor=="custom",if editing{"Fijar posición"}else{"Junto a tu nombre (arrastrar)"}).clicked(){
+                    if ui.selectable_label(editing||self.overlay_preferences.rank_anchor=="custom",if editing{crate::i18n::t("Fijar posición")}else{crate::i18n::t("Junto a tu nombre (arrastrar)")}).clicked(){
                         let mut placement=self.rank_placement.lock().unwrap();
                         if editing{if let Some(position)=placement.dragged{self.overlay_preferences.rank_position=Some(position);self.overlay_preferences.rank_anchor="custom".into();}}
                         placement.editing=!editing;drop(placement);self.save_overlay();
                     }
                 });
-                design::muted(ui,"Si coincide con la esquina del contador de FPS, se coloca debajo para no taparlo.");
+                design::muted(ui,crate::i18n::t("Si coincide con la esquina del contador de FPS, se coloca debajo para no taparlo."));
                 ui.add_space(6.);
-                if crate::design::toggle(ui,&mut self.overlay_preferences.rank_lobby,"MMR del resto de jugadores en partidas igualadas").changed(){self.save_overlay();}
-                design::muted(ui,"Se busca su Tracker una vez al empezar y otra al acabar la partida, no durante el juego.");
+                if crate::design::toggle(ui,&mut self.overlay_preferences.rank_lobby,crate::i18n::t("MMR del resto de jugadores en partidas igualadas")).changed(){self.save_overlay();}
+                design::muted(ui,crate::i18n::t("Se busca su Tracker una vez al empezar y otra al acabar la partida, no durante el juego."));
                 let editing=self.rank_placement.lock().unwrap().editing;
-                if editing{design::muted(ui,"Arrastra el panel a donde quieras (por ejemplo junto a tu nombre) y pulsa Fijar posición.");}
+                if editing{design::muted(ui,crate::i18n::t("Arrastra el panel a donde quieras (por ejemplo junto a tu nombre) y pulsa Fijar posición."));}
                 ui.add_space(6.);
                 if profile_url_ok(&self.tracker_name){
-                    design::muted(ui,&format!("Tu cuenta de Epic: {} (detectada automáticamente)",self.tracker_name.trim()));
+                    design::muted(ui,&crate::i18n::tr(&format!("Tu cuenta de Epic: {} (detectada automáticamente)",self.tracker_name.trim())));
                     let board=self.rank_board.lock().unwrap();
                     let read=RANK_ROWS.iter().map(|(id,label)|format!("{label} {}",board.mmr.iter().find(|m|m.0==*id).map(|m|m.1.as_str()).unwrap_or("—"))).collect::<Vec<_>>().join("   ");
                     drop(board);
-                    design::muted(ui,&format!("Leído de tu Tracker: {read}"));
-                    design::muted(ui,"Se actualiza solo al acabar cada partida.");
+                    design::muted(ui,&crate::i18n::tr(&format!("Leído de tu Tracker: {read}")));
+                    design::muted(ui,crate::i18n::t("Se actualiza solo al acabar cada partida."));
                 }else{
-                    ui.label(RichText::new("Abre Rocket League una vez para detectar tu cuenta de Epic (o escríbela en Tracker > Tracker web).").color(design::RED()));
+                    ui.label(RichText::new(crate::i18n::t("Abre Rocket League una vez para detectar tu cuenta de Epic (o escríbela en Tracker > Tracker web).")).color(design::RED()));
                 }
             });
             return;
@@ -392,36 +392,36 @@ impl App {
         ui.heading("FPS");
         design::muted(
             ui,
-            "Un contador pequeño y sin fondo sobre Rocket League.",
+            crate::i18n::t("Un contador pequeño y sin fondo sobre Rocket League."),
         );
         ui.add_space(16.);
         design::card().show(ui,|ui|{
-            design::eyebrow(ui,"FPS DEL JUEGO",design::GREEN());
-            let before=self.overlay_preferences.fps;crate::design::toggle(ui,&mut self.overlay_preferences.fps,"Mostrar FPS");
+            design::eyebrow(ui,crate::i18n::t("FPS DEL JUEGO"),design::GREEN());
+            let before=self.overlay_preferences.fps;crate::design::toggle(ui,&mut self.overlay_preferences.fps,crate::i18n::t("Mostrar FPS"));
             if before!=self.overlay_preferences.fps{self.telemetry.enable(self.overlay_preferences.fps);self.save_overlay();}
-            let reading=self.telemetry.snapshot();design::muted(ui,if self.overlay_preferences.fps{if reading.live_fps().is_some(){"Midiendo fotogramas del juego".into()}else{reading.status.clone()}}else{"Desactivado".into()});
+            let reading=self.telemetry.snapshot();design::muted(ui,if self.overlay_preferences.fps{if reading.live_fps().is_some(){crate::i18n::t("Midiendo fotogramas del juego").into()}else{reading.status.clone()}}else{crate::i18n::t("Desactivado").into()});
             ui.add_space(10.);draw_metrics(ui,reading.live_fps());
-            design::muted(ui,"Usa ventana sin bordes para ver el overlay externo. Si el juego está minimizado o no hay datos recientes, aparece —.");
+            design::muted(ui,crate::i18n::t("Usa ventana sin bordes para ver el overlay externo. Si el juego está minimizado o no hay datos recientes, aparece —."));
         });
         ui.add_space(12.);
         design::card().show(ui, |ui| {
-            design::eyebrow(ui, "POSICIÓN", design::CYAN());
+            design::eyebrow(ui, crate::i18n::t("POSICIÓN"), design::CYAN());
             ui.horizontal_wrapped(|ui| {
-                if ui.button("Arriba a la izquierda").clicked() {
+                if ui.button(crate::i18n::t("Arriba a la izquierda")).clicked() {
                     self.overlay_preferences.anchor = "top-left".into();
                     self.save_overlay();
                 }
-                if ui.button("Arriba a la derecha").clicked() {
+                if ui.button(crate::i18n::t("Arriba a la derecha")).clicked() {
                     self.overlay_preferences.anchor = "top-right".into();
                     self.save_overlay();
                 }
-                for (label, anchor) in [("Abajo a la izquierda", "bottom-left"),("Abajo a la derecha", "bottom-right")] {
+                for (label, anchor) in [(crate::i18n::t("Abajo a la izquierda"), "bottom-left"),(crate::i18n::t("Abajo a la derecha"), "bottom-right")] {
                     if ui.button(label).clicked() { self.overlay_preferences.anchor=anchor.into(); self.save_overlay(); }
                 }
             });
             let mut changed=false;
             ui.horizontal_wrapped(|ui|{
-                ui.label("Tamaño");
+                ui.label(crate::i18n::t("Tamaño"));
                 changed |= ui.add(egui::Slider::new(&mut self.overlay_preferences.size,10.0..=28.0).suffix(" px")).changed();
                 ui.label("Color"); changed |= ui.color_edit_button_srgb(&mut self.overlay_preferences.color).changed();
             });
@@ -429,9 +429,9 @@ impl App {
             let editing = self.overlay_placement.lock().unwrap().editing;
             if ui
                 .button(if editing {
-                    "Fijar posición"
+                    crate::i18n::t("Fijar posición")
                 } else {
-                    "Mover a cualquier lugar"
+                    crate::i18n::t("Mover a cualquier lugar")
                 })
                 .clicked()
             {
@@ -449,7 +449,7 @@ impl App {
             if editing {
                 design::muted(
                     ui,
-                    "Arrastra el indicador flotante y después pulsa Fijar posición.",
+                    crate::i18n::t("Arrastra el indicador flotante y después pulsa Fijar posición."),
                 );
             }
         });

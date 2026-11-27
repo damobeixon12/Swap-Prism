@@ -3,7 +3,7 @@ use crate::design as d;
 
 pub const MODES:[(i64,&str);7]=[(10,"1v1 · Duel"),(11,"2v2 · Doubles"),(13,"3v3 · Standard"),(27,"Hoops"),(28,"Rumble"),(29,"Dropshot"),(30,"Snow Day")];
 const TIERS:[&str;23]=["Sin rango","Bronze I","Bronze II","Bronze III","Silver I","Silver II","Silver III","Gold I","Gold II","Gold III","Platinum I","Platinum II","Platinum III","Diamond I","Diamond II","Diamond III","Champion I","Champion II","Champion III","Grand Champion I","Grand Champion II","Grand Champion III","Supersonic Legend"];
-pub fn mode_label(id:i64)->&'static str{MODES.iter().find(|(key,_)|*key==id).map(|(_,label)|*label).unwrap_or("Modalidad")}
+pub fn mode_label(id:i64)->&'static str{MODES.iter().find(|(key,_)|*key==id).map(|(_,label)|*label).unwrap_or(crate::i18n::t("Modalidad"))}
 pub fn tier_label(tier:usize)->&'static str{TIERS[tier.min(22)]}
 /// Tier from an English rank name as Tracker writes it ("Gold II"); unknown names are unranked.
 pub fn tier_index(name:&str)->usize{TIERS.iter().position(|t|*t==name).unwrap_or(0)}
@@ -44,37 +44,37 @@ pub fn rank_icon(ui:&egui::Ui,rect:egui::Rect,tier:usize){
 impl App{
     pub(super) fn fake_rank_editor(&mut self,ui:&mut egui::Ui){
         if !self.rank_draft.is_object()||self.rank_draft.as_object().unwrap().is_empty(){self.rank_draft=json!({"enabled":true,"playlist":11,"mmr":2450,"tier":22,"division":0,"auto":true});}
-        ui.heading("Fake rank");d::muted(ui,"Cambia la apariencia de tu modalidad en el menú competitivo. Tu rango real y el emparejamiento no cambian.");
+        ui.heading("Fake rank");d::muted(ui,crate::i18n::t("Cambia la apariencia de tu modalidad en el menú competitivo. Tu rango real y el emparejamiento no cambian."));
         let mut mode=self.rank_draft["playlist"].as_i64().unwrap_or(11);let mut mmr=self.rank_draft["mmr"].as_i64().unwrap_or(2450);let mut tier=self.rank_draft["tier"].as_u64().unwrap_or(22).min(22)as usize;let mut division=self.rank_draft["division"].as_i64().unwrap_or(0);let mut auto=self.rank_draft["auto"]!=false;
         egui::ScrollArea::vertical().id_salt("fake-rank-editor").show(ui,|ui|{
             d::card().show(ui,|ui|{
                 ui.horizontal_wrapped(|ui|{
-                    ui.vertical(|ui|{ui.label("Modalidad");egui::ComboBox::from_id_salt("fake-playlist").selected_text(MODES.iter().find(|(id,_)|*id==mode).map(|(_,l)|*l).unwrap_or("2v2 · Doubles")).show_ui(ui,|ui|{for(id,label)in MODES{ui.selectable_value(&mut mode,id,label);}});});
-                    ui.vertical(|ui|{ui.label("Elo / MMR visual");ui.add(egui::DragValue::new(&mut mmr).range(0..=10000).speed(1));});
-                    crate::design::toggle(ui,&mut auto,"Rango automático · escala visual");
+                    ui.vertical(|ui|{ui.label(crate::i18n::t("Modalidad"));egui::ComboBox::from_id_salt("fake-playlist").selected_text(MODES.iter().find(|(id,_)|*id==mode).map(|(_,l)|*l).unwrap_or("2v2 · Doubles")).show_ui(ui,|ui|{for(id,label)in MODES{ui.selectable_value(&mut mode,id,label);}});});
+                    ui.vertical(|ui|{ui.label(crate::i18n::t("Elo / MMR visual"));ui.add(egui::DragValue::new(&mut mmr).range(0..=10000).speed(1));});
+                    crate::design::toggle(ui,&mut auto,crate::i18n::t("Rango automático · escala visual"));
                 });
                 if auto{tier=visual_tier(mmr);}
                 ui.horizontal_wrapped(|ui|{
                     egui::ComboBox::from_id_salt("fake-tier").selected_text(TIERS[tier]).show_ui(ui,|ui|{for(i,label)in TIERS.iter().enumerate(){ui.horizontal(|ui|{let(rect,_)=ui.allocate_exact_size(Vec2::splat(30.),egui::Sense::hover());rank_icon(ui,rect,i);if ui.selectable_value(&mut tier,i,*label).changed(){auto=false;}});}});
-                    if tier>0&&tier<22{egui::ComboBox::from_id_salt("fake-division").selected_text(format!("División {}",division+1)).show_ui(ui,|ui|{for i in 0..4{ui.selectable_value(&mut division,i,format!("División {}",i+1));}});}else{division=0;}
+                    if tier>0&&tier<22{egui::ComboBox::from_id_salt("fake-division").selected_text(crate::i18n::tr(&format!("División {}",division+1))).show_ui(ui,|ui|{for i in 0..4{ui.selectable_value(&mut division,i,crate::i18n::tr(&format!("División {}",i+1)));}});}else{division=0;}
                 });
-                d::muted(ui,"Escala de simulación: 1300 → GC I, 1900 → SSL. No son los umbrales reales de todas las modalidades; también puedes elegir el rango manualmente.");
+                d::muted(ui,crate::i18n::t("Escala de simulación: 1300 → GC I, 1900 → SSL. No son los umbrales reales de todas las modalidades; también puedes elegir el rango manualmente."));
             });
             ui.add_space(16.);
             d::card().inner_margin(26).show(ui,|ui|{
-                d::eyebrow(ui,"SHOWCASE · SOLO LOCAL",d::MUTED());
+                d::eyebrow(ui,crate::i18n::t("SHOWCASE · SOLO LOCAL"),d::MUTED());
                 ui.label(RichText::new(MODES.iter().find(|(id,_)|*id==mode).unwrap().1).size(19.));
-                ui.horizontal(|ui|{let(rect,_)=ui.allocate_exact_size(Vec2::splat(94.),egui::Sense::hover());rank_icon(ui,rect,tier);ui.vertical(|ui|{ui.label(RichText::new(TIERS[tier]).size(29.).strong());ui.label(RichText::new(format!("{mmr} MMR{}",if tier>0&&tier<22{format!(" · División {}",division+1)}else{String::new()})).size(22.).color(d::GREEN()));});});
+                ui.horizontal(|ui|{let(rect,_)=ui.allocate_exact_size(Vec2::splat(94.),egui::Sense::hover());rank_icon(ui,rect,tier);ui.vertical(|ui|{ui.label(RichText::new(TIERS[tier]).size(29.).strong());ui.label(RichText::new(format!("{mmr} MMR{}",if tier>0&&tier<22{crate::i18n::tr(&format!(" · División {}",division+1))}else{String::new()})).size(22.).color(d::GREEN()));});});
             });
             ui.add_space(16.);
             ui.horizontal_wrapped(|ui|{
-                if ui.add_enabled(!self.busy,d::button("Añadir fake rank",d::GREEN())).clicked(){
+                if ui.add_enabled(!self.busy,d::button(crate::i18n::t("Añadir fake rank"),d::GREEN())).clicked(){
                     let mut settings=self.profile_pending.clone().unwrap_or_else(||self.profile_state["settings"].clone());if !settings.is_object(){settings=json!({});}
                     settings["rank"]=json!({"enabled":true,"playlist":mode,"mmr":mmr,"tier":tier,"division":division});self.queue_profile(settings);
                 }
-                if ui.add_enabled(!self.busy,d::button("Quitar fake rank",d::RED())).clicked(){let mut settings=self.profile_pending.clone().unwrap_or_else(||self.profile_state["settings"].clone());if settings.is_object(){settings["rank"]=Value::Null;self.queue_profile(settings);}}
+                if ui.add_enabled(!self.busy,d::button(crate::i18n::t("Quitar fake rank"),d::RED())).clicked(){let mut settings=self.profile_pending.clone().unwrap_or_else(||self.profile_state["settings"].clone());if settings.is_object(){settings["rank"]=Value::Null;self.queue_profile(settings);}}
             });
-            d::muted(ui,"Se añade a los cambios sin aplicar. Cierra Rocket League antes de aplicar o restaurar la apariencia.");
+            d::muted(ui,crate::i18n::t("Se añade a los cambios sin aplicar. Cierra Rocket League antes de aplicar o restaurar la apariencia."));
         });
         self.rank_draft=json!({"enabled":true,"playlist":mode,"mmr":mmr,"tier":tier,"division":division,"auto":auto});
         if self.design_dir.is_none(){let _=fs::write(self.root.join("data/rank-draft.json"),self.rank_draft.to_string());}
