@@ -72,7 +72,7 @@ fn replace_instructions(code: &[u8], pick: impl Fn(&[u8], &(usize, usize, u8, Ve
 }
 
 /// Diagnostic logging of what each avatar receives (Launch.log, category SwapPrism). Off for releases.
-const AVATAR_LOG: bool = false;
+const AVATAR_LOG: bool = true;
 
 /// A runtime-name multiname (MultinameL) over the public namespace: `obj[name]` for a name the movie never uses.
 fn runtime_name(abc: &Abc) -> Option<u32> {
@@ -654,7 +654,8 @@ fn add_local_frame(movie: &[u8], raw: &[u8]) -> R<(Vec<u8>, bool)> {
 }
 
 /// The local player's avatar shows the embedded frame without the team tint.
-fn patch_avatar(data: &[u8]) -> R<(Vec<u8>, Vec<String>)> {
+/// `photo`: false keeps the photo out of this movie (the goal replay flags the replayed player as local): only the undo runs.
+fn patch_avatar(data: &[u8], photo: bool) -> R<(Vec<u8>, Vec<String>)> {
     let abc = Abc::parse(data)?;
     let Some(cls) = abc.class("tagame.controls.PlayerAvatar") else { return Ok((data.to_vec(), Vec::new())) };
     let methods: Vec<u32> = cls.traits.iter().filter(|t| t.kind == 1 && t.name.ends_with(".validateAvatarIcon")).filter_map(|t| t.method).collect();
@@ -737,7 +738,8 @@ fn patch_avatar(data: &[u8]) -> R<(Vec<u8>, Vec<String>)> {
         // Only where DevUtil is defined in this movie: an undefined class would throw and stop the avatar code.
         abc.class("tagame.api.DevUtil")?;
         let (dev, logm) = (r("tagame.api.DevUtil")?, r("Log")?);
-        let texts: [&'static str; 10] = ["SwapPrism", "", " id=", " local=", " label=", " frames=", " platform=", " psyonix=", " tinted=", " loader="];
+        let texts: [&'static str; 16] = ["SwapPrism", "", " id=", " local=", " label=", " frames=", " platform=", " psyonix=", " tinted=", " loader=",
+            " jugador=", " override=", " eslocal=", " icono_visible=", " imagen_visible=", " "];
         let base = abc.strings.len() as u32 + 3;
         let mut index = |k: usize| -> u32 { base + extra_strings.iter().position(|t| *t == texts[k]).unwrap_or_else(|| { extra_strings.push(texts[k]); extra_strings.len() - 1 }) as u32 };
         let mut c = op(0x60, dev);
@@ -750,10 +752,19 @@ fn patch_avatar(data: &[u8]) -> R<(Vec<u8>, Vec<String>)> {
             for (prefix, n) in parts { v.extend(*prefix); if !n.is_empty() { v.extend(op(0x66, r(n)?)); } }
             Some(v)
         };
-        let fields: [(usize, Option<Vec<u8>>); 8] = [
+        // Player name from the info row, or null when there is none (no property read on null).
+        let player_name = r("PlayerName").and_then(|n| r("tagame.controls:PlayerAvatar.m_playerInfoRow").map(|row| {
+            let mut v = vec![0xd0]; v.extend(op(0x66, row)); v.push(0x2a); let get = op(0x66, n); v.extend(jump(0x12, get.len())); v.extend(get); v
+        }));
+        let fields: [(usize, Option<Vec<u8>>); 13] = [
+            (10, player_name),
+            (11, chain(&[(&[0xd0], "tagame.controls:PlayerAvatar.m_overrideColor")])),
+            (12, chain(&[(&[0xd0], "tagame.controls:PlayerAvatar.m_isLocalPlayer")])),
+            (13, chain(&[(&tinted, "visible")])),
+            (14, chain(&[(&loader, "visible")])),
             (2, chain(&[(&[0xd0], "tagame.controls:PlayerAvatar.m_playerId")])),
             (3, r("tagame.api.LocalPlayer").and_then(|l| chain(&[(&op(0x60, l), "PlayerID")]))),
-            (4, chain(&[(&tinted, "currentLabel")])),
+            (4, current_label.clone().map(|l| [&tinted[..], &l[..]].concat())),
             (5, chain(&[(&tinted, "totalFrames")])),
             (6, chain(&[(&[0xd0], "tagame.controls:PlayerAvatar.m_platform")])),
             (7, chain(&[(&[0xd0], "tagame.controls:PlayerAvatar.m_bUsePsyonixAvatar")])),
@@ -784,7 +795,8 @@ fn patch_avatar(data: &[u8]) -> R<(Vec<u8>, Vec<String>)> {
         }
         _ => Vec::new(),
     };
-    let code = [&body.code[..scope], &validate_log[..], &restore[..], &local_only(&render)?[..], &body.code[scope..]].concat();
+    let shown = if photo { local_only(&render)? } else { Vec::new() };
+    let code = [&body.code[..scope], &validate_log[..], &restore[..], &shown[..], &body.code[scope..]].concat();
     let mut edits = vec![body_edit(&abc, mid, &code)?];
     if saved_frame { edits.push(locals_edit(&abc, mid, 1)?); }
     if !validate_log.is_empty() { edits.push(stack_edit(&abc, mid, 6)?); }
@@ -796,7 +808,7 @@ fn patch_avatar(data: &[u8]) -> R<(Vec<u8>, Vec<String>)> {
     pooled.extend(b"currentLabel");
     let mut changed: HashMap<u32, Vec<u8>> = HashMap::from([(mid, code)]);
     let tint: Vec<u32> = cls.traits.iter().filter(|t| t.kind == 1 && t.name.ends_with(".updateTeamColor")).filter_map(|t| t.method).collect();
-    if let [t] = tint[..] {
+    if let ([t], true) = (&tint[..], photo) { let t = *t;
         let tbody = abc.body(t).ok_or("Método sin cuerpo.")?;
         if tbody.code.last() == Some(&0x47) && tbody.exceptions == 0 {
             // Runs after every team-colour update, just before the final returnvoid.
@@ -868,7 +880,7 @@ pub fn patch_movie(movie: &[u8], name: &str, title: &Value, avatar: Option<&[u8]
         fields.extend(rank_fields);
     }
     if avatar.is_some() {
-        let (n, scoped) = patch_avatar(&new)?;
+        let (n, scoped) = patch_avatar(&new, frame)?;
         new = n;
         if !scoped.is_empty() || !avatar_fields.is_empty() { features.insert("avatar".into()); }
         fields.extend(scoped);
