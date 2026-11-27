@@ -74,6 +74,12 @@ fn replace_instructions(code: &[u8], pick: impl Fn(&[u8], &(usize, usize, u8, Ve
 /// Diagnostic logging of what each avatar receives (Launch.log, category SwapPrism). Off for releases.
 const AVATAR_LOG: bool = false;
 
+/// A runtime-name multiname (MultinameL) over the public namespace: `obj[name]` for a name the movie never uses.
+fn runtime_name(abc: &Abc) -> Option<u32> {
+    let public = |n: &u32| abc.namespaces.get(*n as usize).is_some_and(|ns| ns.0 == 0x16 && abc.strings.get(ns.1 as usize).is_some_and(|s| s.is_empty()));
+    (1..abc.multinames.len()).find(|&i| abc.multinames[i].kind == 0x1b && abc.nssets.get(abc.multinames[i].ns as usize).is_some_and(|set| set.iter().any(public))).map(|i| i as u32)
+}
+
 /// PlayerID of a player the game has not resolved yet (LocalPlayer reports the same value meanwhile).
 const UNKNOWN_ID: &str = "Unknown|0|0";
 
@@ -679,9 +685,14 @@ fn patch_avatar(data: &[u8]) -> R<(Vec<u8>, Vec<String>)> {
     // there the icon must stay native, or it shows as an empty black avatar. The frame is the sprite's last one.
     let mut untint = untint;
     let mut saved_frame = false;
-    if let (Ok(total), Ok(label), Ok(goto)) = (abc.reference("totalFrames"), abc.reference("currentLabel"), abc.reference("gotoAndStop")) {
+    // currentLabel: its multiname, or read by name (obj["currentLabel"]) where the movie never names it.
+    let current_label: Option<Vec<u8>> = match abc.reference("currentLabel") {
+        Ok(r) => Some(op(0x66, r)),
+        Err(_) => runtime_name(&abc).map(|ml| { let mut v = op(0x2c, abc.strings.len() as u32 + 2); v.extend(op(0x66, ml)); v }),
+    };
+    if let (Ok(total), Some(label), Ok(goto)) = (abc.reference("totalFrames"), current_label.clone(), abc.reference("gotoAndStop")) {
         let has_frame = |code: &[u8]| -> Vec<u8> {
-            let mut c = tinted.clone(); c.extend(op(0x66, label)); c.extend(op(0x2c, abc.strings.len() as u32));
+            let mut c = tinted.clone(); c.extend(&label); c.extend(op(0x2c, abc.strings.len() as u32));
             c.extend(jump(0x14, code.len())); // ifne
             c.extend(code);
             c
@@ -727,7 +738,7 @@ fn patch_avatar(data: &[u8]) -> R<(Vec<u8>, Vec<String>)> {
         abc.class("tagame.api.DevUtil")?;
         let (dev, logm) = (r("tagame.api.DevUtil")?, r("Log")?);
         let texts: [&'static str; 10] = ["SwapPrism", "", " id=", " local=", " label=", " frames=", " platform=", " psyonix=", " tinted=", " loader="];
-        let base = abc.strings.len() as u32 + 2;
+        let base = abc.strings.len() as u32 + 3;
         let mut index = |k: usize| -> u32 { base + extra_strings.iter().position(|t| *t == texts[k]).unwrap_or_else(|| { extra_strings.push(texts[k]); extra_strings.len() - 1 }) as u32 };
         let mut c = op(0x60, dev);
         c.extend(op(0x2c, index(0)));
@@ -757,7 +768,23 @@ fn patch_avatar(data: &[u8]) -> R<(Vec<u8>, Vec<String>)> {
         Some(c)
     };
     let validate_log = log("validate", &mut extra_strings).unwrap_or_default();
-    let code = [&body.code[..scope], &validate_log[..], &local_only(&render)?[..], &body.code[scope..]].concat();
+    // The game reuses one avatar for several players (e.g. the replay's "scored by" panel) and never undoes our photo:
+    // the next player kept a hidden picture and an uncoloured (black) icon. Each refresh starts by undoing it; the
+    // local player then gets the photo again just below. Colour back from the frame, as the game's updateTeamColor does.
+    let restore = match (&current_label, abc.reference("getbShowingVanityObject"), abc.reference("avatarFrame")) {
+        (Some(label), Ok(vanity), Ok(frame)) => {
+            let mut rest = loader.clone(); rest.push(0x26); rest.extend(setprop("visible")?);
+            rest.extend(&tinted); rest.extend(&loader); rest.extend(op(0x46, vanity)); rest.push(0x00); rest.push(0x96); rest.extend(setprop("visible")?);
+            let mut colour = tinted.clone(); colour.extend(prop("transform")?);
+            colour.push(0xd0); colour.extend(op(0x66, frame)); colour.extend(prop("transform")?); colour.extend(prop("colorTransform")?); colour.extend(setprop("colorTransform")?);
+            rest.push(0xd0); rest.extend(op(0x66, frame)); rest.extend(jump(0x12, colour.len())); rest.extend(colour);
+            let mut check = tinted.clone(); check.extend(label); check.extend(op(0x2c, abc.strings.len() as u32));
+            check.extend(jump(0x14, rest.len()));
+            [check, rest].concat()
+        }
+        _ => Vec::new(),
+    };
+    let code = [&body.code[..scope], &validate_log[..], &restore[..], &local_only(&render)?[..], &body.code[scope..]].concat();
     let mut edits = vec![body_edit(&abc, mid, &code)?];
     if saved_frame { edits.push(locals_edit(&abc, mid, 1)?); }
     if !validate_log.is_empty() { edits.push(stack_edit(&abc, mid, 6)?); }
@@ -765,6 +792,8 @@ fn patch_avatar(data: &[u8]) -> R<(Vec<u8>, Vec<String>)> {
     pooled.extend(FRAME.as_bytes());
     pooled.extend(encode_u30(UNKNOWN_ID.len() as u32));
     pooled.extend(UNKNOWN_ID.as_bytes());
+    pooled.extend(encode_u30("currentLabel".len() as u32));
+    pooled.extend(b"currentLabel");
     let mut changed: HashMap<u32, Vec<u8>> = HashMap::from([(mid, code)]);
     let tint: Vec<u32> = cls.traits.iter().filter(|t| t.kind == 1 && t.name.ends_with(".updateTeamColor")).filter_map(|t| t.method).collect();
     if let [t] = tint[..] {
@@ -805,7 +834,7 @@ fn patch_avatar(data: &[u8]) -> R<(Vec<u8>, Vec<String>)> {
     }
     for text in &extra_strings { pooled.extend(encode_u30(text.len() as u32)); pooled.extend(text.as_bytes()); }
     edits.push((abc.string_pool_end, abc.string_pool_end, pooled));
-    edits.push(count_edit(&abc, 2 + extra_strings.len())?);
+    edits.push(count_edit(&abc, 3 + extra_strings.len())?);
     let result = splice(&abc, &mut edits);
     let after = Abc::parse(&result)?;
     if after.classes != abc.classes || after.methods != abc.methods { return Err("Cambió una definición del avatar.".into()); }
@@ -992,7 +1021,7 @@ mod parity {
     fn real_avatar_patch_is_valid() {
         let folder = std::path::PathBuf::from(std::env::var("SP_BACKUPS").unwrap());
         let picture = std::fs::read(std::env::var("SP_PICTURE").unwrap()).unwrap();
-        let (mut checked, mut waiting, mut rewritten, mut logged, mut registers) = (0, 0, 0, 0, 0);
+        let (mut checked, mut waiting, mut rewritten, mut logged, mut registers, mut restores) = (0, 0, 0, 0, 0, 0);
         let mut original_bodies: HashMap<(String, usize, u32), Vec<u8>> = HashMap::new();
         for entry in std::fs::read_dir(&folder).unwrap().flatten() {
             let file = entry.file_name().to_string_lossy().to_string();
@@ -1029,6 +1058,13 @@ mod parity {
                     }
                 }
                 if abc.strings.iter().any(|x| x == " loader=") { logged += 1; }
+                // Every patched PlayerAvatar undoes the photo before refreshing (calls getbShowingVanityObject in validate).
+                if let (Some(c), Ok(vanity)) = (abc.class("tagame.controls.PlayerAvatar"), abc.reference("getbShowingVanityObject")) {
+                    if let Some(m) = c.traits.iter().find(|t| t.name.ends_with(".validateAvatarIcon")).and_then(|t| t.method) {
+                        let list = crate::engine::hud::instructions(&abc.body(m).unwrap().code).unwrap();
+                        if list.iter().any(|i| i.2 == 0x46 && i.3[0] == vanity) { restores += 1; } else { println!("SIN RESTAURAR {file}"); }
+                    }
+                }
                 // The frame lookup stores the previous frame in a new local register: it must be counted.
                 if let Some(c) = abc.class("tagame.controls.PlayerAvatar") {
                     if let Some(m) = c.traits.iter().find(|t| t.name.ends_with(".validateAvatarIcon")).and_then(|t| t.method) {
@@ -1049,9 +1085,10 @@ mod parity {
             }
         }
         // Diagnostic build: count movies whose PlayerAvatar logs to the game.
-        println!("REGISTRO en {} peliculas; registro de fotograma comprobado en {registers}", logged);
+        println!("REGISTRO en {} peliculas; registro de fotograma comprobado en {registers}; restauracion en {restores}", logged);
         println!("RESUMEN {checked} peliculas, {rewritten} metodos reescritos con saltos validos, lista de espera en {waiting}");
         assert!(checked > 50 && waiting >= 1);
     }
 }
+
 
