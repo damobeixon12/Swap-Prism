@@ -69,8 +69,7 @@ impl App {
                 "Queue" => self.changes(ui),
                 "Studio" => self.studio_editor(ui),
                 "Workshop" => self.workshop_editor(ui),
-                "Tracker" if self.tracker_tab == 0 => self.my_ranks(ui),
-                "Tracker" => self.tracker_editor(ui),
+                "Tracker" => self.my_ranks(ui),
                 "Play" => self.home(ui),
                 "MySettings" => self.my_settings(ui),
                 "Community" => self.community(ui),
@@ -131,7 +130,6 @@ impl App {
             }
             "Overlay"=>{if let Some(i)=d::tabs(ui,&["FPS","Mi MMR"],self.overlay_tab.min(1)){self.overlay_tab=i;}}
             "MySettings"=>{if let Some(i)=d::tabs(ui,&["Cámara","Controles","Vídeo"],self.settings_tab){self.settings_tab=i;}}
-            "Tracker"=>{if let Some(i)=d::tabs(ui,&["Mis rangos","Tracker web"],self.tracker_tab){self.tracker_tab=i;}}
             "Studio"=>{
                 let selected=match(self.studio_tab,self.studio_sound_kind.as_str()){(0,_)=>0,(1,"reset")=>1,(1,_)=>2,(2,_)=>3,_=>4};
                 if let Some(i)=d::tabs(ui,&["Paleta de colores","Sonido del reset","Poste y travesaño","Color del reset","Inicio de temporada"],selected){

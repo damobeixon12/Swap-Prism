@@ -2,21 +2,34 @@ use super::*;
 use crate::design as d;
 
 impl App{
+    /// One compact row per sound: play, name, small waveform, «Usar».
     pub(super) fn sound_library(&mut self,ui:&mut egui::Ui){
-        ui.heading("Mi biblioteca de sonidos");d::muted(ui,"Escucha el fragmento o elígelo. Puedes ajustar su recorte en Actual.");
         let items:Vec<_>=self.audio_library.iter().filter(|a|s(a,"kind")==self.studio_sound_kind).cloned().collect();
-        egui::ScrollArea::vertical().id_salt("sound-library").show(ui,|ui|{
-            if items.is_empty(){d::muted(ui,"Todavía no hay sonidos para este evento. Importa un MP3 o entra en Descargar.");}
-            for audio in items{d::card().inner_margin(14).show(ui,|ui|{
-                ui.horizontal(|ui|{ui.label(RichText::new(s(&audio,"name")).strong());d::muted(ui,format!("{:.2} s",audio["seconds"].as_f64().unwrap_or(0.)));});
-                let(rect,_)=ui.allocate_exact_size(Vec2::new(ui.available_width(),42.),egui::Sense::hover());
-                for(i,peak)in audio["peaks"].as_array().into_iter().flatten().enumerate(){let x=rect.left()+(i as f32+0.5)/96.*rect.width();let h=(peak.as_f64().unwrap_or(0.)as f32*34.).max(2.);ui.painter().line_segment([egui::pos2(x,rect.center().y-h/2.),egui::pos2(x,rect.center().y+h/2.)],egui::Stroke::new(2_f32,d::MUTED()));}
-                ui.horizontal_wrapped(|ui|{
-                    if ui.add_enabled(!self.busy,egui::Button::new("▶ Escuchar")).clicked(){self.call("sound_preview",json!({"action":"sound_preview","path":audio["path"],"start":audio["start"],"end":audio["end"],"volume":audio["volume"]}));}
-                    if ui.add_enabled(!self.busy,d::button("Elegir",d::GREEN())).clicked(){self.studio_draft["sounds"][&self.studio_sound_kind]=audio.clone();self.save_studio_draft();self.sound_browser=0;self.status="Sonido añadido a Aplicar cambios. Puedes ajustar el recorte en Actual.".into();}
+        if items.is_empty(){d::muted(ui,"Aún no tienes sonidos. Elige un MP3 o descárgalo.");return;}
+        let current=self.studio_draft["sounds"][&self.studio_sound_kind]["path"].clone();
+        egui::ScrollArea::vertical().id_salt("sound-library").show(ui,|ui|{d::card().inner_margin(egui::Margin::symmetric(16,6)).show(ui,|ui|{
+            for(n,audio)in items.iter().enumerate(){
+                if n>0{let y=ui.cursor().min.y;ui.painter().hline(ui.max_rect().x_range(),y,egui::Stroke::new(1_f32,d::LINE()));}
+                ui.horizontal(|ui|{
+                    ui.set_min_height(52.);
+                    let(b,resp)=ui.allocate_exact_size(Vec2::splat(32.),egui::Sense::click());
+                    ui.painter().circle_filled(b.center(),16.,if resp.hovered(){d::TEXT()}else{d::LINE()});
+                    let c=b.center();let tri=if resp.hovered(){d::BACKGROUND()}else{d::TEXT()};
+                    ui.painter().add(egui::Shape::convex_polygon(vec![c+Vec2::new(-4.,-7.),c+Vec2::new(8.,0.),c+Vec2::new(-4.,7.)],tri,egui::Stroke::NONE));
+                    if resp.on_hover_cursor(egui::CursorIcon::PointingHand).on_hover_text("Escuchar").clicked()&&!self.busy{self.call("sound_preview",json!({"action":"sound_preview","path":audio["path"],"start":audio["start"],"end":audio["end"],"volume":audio["volume"]}));}
+                    ui.add_space(6.);
+                    ui.vertical(|ui|{ui.add_space(6.);ui.add(egui::Label::new(RichText::new(s(audio,"name"))).truncate());ui.label(RichText::new(format!("{:.1} s",audio["seconds"].as_f64().unwrap_or(0.))).size(12.).color(d::MUTED()));});
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center),|ui|{
+                        let chosen=audio["path"]==current;
+                        if chosen{ui.label(RichText::new("En uso").size(13.).color(d::MUTED()));}
+                        else if ui.add_enabled(!self.busy,d::button("Usar",d::TEXT()).min_size(Vec2::new(0.,32.))).clicked(){self.studio_draft["sounds"][&self.studio_sound_kind]=audio.clone();self.save_studio_draft();self.sound_browser=0;self.status="Sonido elegido. Pulsa Aplicar abajo.".into();}
+                        ui.add_space(10.);
+                        let(w,_)=ui.allocate_exact_size(Vec2::new(140.,24.),egui::Sense::hover());
+                        for(i,peak)in audio["peaks"].as_array().into_iter().flatten().enumerate().step_by(3){let x=w.left()+(i as f32+0.5)/96.*w.width();let h=(peak.as_f64().unwrap_or(0.)as f32*22.).max(2.);ui.painter().line_segment([egui::pos2(x,w.center().y-h/2.),egui::pos2(x,w.center().y+h/2.)],egui::Stroke::new(2_f32,d::MUTED().gamma_multiply(0.6)));}
+                    });
                 });
-            });ui.add_space(8.);}
-        });
+            }
+        });});
     }
 
     pub(super) fn media_panel(&mut self,ui:&mut egui::Ui,sound:bool){
