@@ -72,7 +72,8 @@ fn watch_scoreboard(ctx: &egui::Context) {
         std::thread::spawn(move || loop {
             let held = platform::scoreboard_held();
             platform::scoreboard_pressed();
-            if held != platform::scoreboard_held() { ctx.request_repaint_of(egui::ViewportId::from_hash_of("swapprism-scoreboard")); }
+            // The root frame sends the show/hide command; the strip repaints itself once visible.
+            if held != platform::scoreboard_held() { ctx.request_repaint(); ctx.request_repaint_of(egui::ViewportId::from_hash_of("swapprism-scoreboard")); }
             std::thread::sleep(Duration::from_millis(30));
         });
     });
@@ -167,59 +168,58 @@ pub fn scoreboard_rows(rows: &[LobbyRow]) -> Vec<(&LobbyRow, f32)> {
 }
 
 /// While the scoreboard button is held in a ranked match: rank icon left of each player's photo, MMR after the name.
-/// The window lives for the whole match and stays visible (transparent): creating it on each press flashed white, and
-/// hiding/showing it behind egui's back stopped its repaints, so a later press showed an unpainted (black) surface.
+/// The window only covers the strip with the icons and MMRs: a window as large as the screen, on top of the game,
+/// is treated by Windows as a fullscreen app and lost its transparency (the whole screen went black, 26/11/2026).
+/// It is shown and hidden through egui (not behind its back), so it is always repainted when it appears.
 fn show_scoreboard(ctx: &egui::Context, board: Arc<Mutex<RankBoard>>) {
-    let active = !board.lock().unwrap().lobby.is_empty() && platform::foreground_game();
-    // Diagnostic (black screen on the scoreboard): window state at every change of what is wanted.
-    static LAST: std::sync::Mutex<(bool, bool)> = std::sync::Mutex::new((false, false));
-    let note = |wanted: (bool, bool)| {
-        let mut last = LAST.lock().unwrap();
-        if *last != wanted { *last = wanted; platform::log_overlay(BOARD_TITLE, &format!("activo={} pulsado={}", wanted.0, wanted.1)); }
-    };
-    let Some(bounds) = platform::game_bounds().filter(|_| active) else {
-        note((false, platform::scoreboard_held()));
-        platform::overlay_visibility(BOARD_TITLE, false);
-        return;
-    };
-    note((true, platform::scoreboard_held()));
+    let id = egui::ViewportId::from_hash_of("swapprism-scoreboard");
+    let rows: Vec<f32> = scoreboard_rows(&board.lock().unwrap().lobby).iter().map(|r| r.1).collect();
+    let active = !rows.is_empty() && platform::foreground_game();
+    static SHOWN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    // Not drawn this frame: egui closes the window, and a new one starts hidden.
+    let Some(bounds) = platform::game_bounds().filter(|_| active) else { SHOWN.store(false, std::sync::atomic::Ordering::Relaxed); return };
+    // Strip in screen pixels, from the 1080p layout: rank icon at -555, MMR centred at -149 (relative to the centre).
+    let s = (bounds[3] - bounds[1]) / 1080.;
+    let (cx, cy) = ((bounds[0] + bounds[2]) / 2., (bounds[1] + bounds[3]) / 2.);
+    let top = rows.iter().cloned().fold(f32::MAX, f32::min);
+    let bottom = rows.iter().cloned().fold(f32::MIN, f32::max);
+    let strip = [cx - 590. * s, cy + (top - 32.) * s, cx - 70. * s, cy + (bottom + 32.) * s];
     let scale = ctx.pixels_per_point();
     let builder = egui::ViewportBuilder::default()
         .with_title(BOARD_TITLE)
         .with_decorations(false)
         .with_transparent(true)
-        .with_inner_size([(bounds[2] - bounds[0]) / scale, (bounds[3] - bounds[1]) / scale])
-        .with_position(egui::pos2(bounds[0] / scale, bounds[1] / scale))
+        .with_inner_size([(strip[2] - strip[0]) / scale, (strip[3] - strip[1]) / scale])
+        .with_position(egui::pos2(strip[0] / scale, strip[1] / scale))
         .with_resizable(false)
         .with_taskbar(false)
         .with_active(false)
         .with_mouse_passthrough(true)
         .with_window_level(egui::WindowLevel::AlwaysOnTop)
         .with_visible(false);
-    platform::transparent_overlay(BOARD_TITLE, false);
-    ctx.show_viewport_deferred(egui::ViewportId::from_hash_of("swapprism-scoreboard"), builder, move |ctx, _| {
+    let held = platform::scoreboard_held();
+    if SHOWN.swap(held, std::sync::atomic::Ordering::Relaxed) != held {
+        ctx.send_viewport_cmd_to(id, egui::ViewportCommand::Visible(held));
+        platform::log_overlay(BOARD_TITLE, &format!("pulsado={held}"));
+    }
+    ctx.show_viewport_deferred(id, builder, move |ctx, _| {
         ctx.request_repaint_after(Duration::from_millis(100));
         platform::transparent_overlay(BOARD_TITLE, false);
-        // Shown once the colour key is set; only the rows depend on the button.
-        platform::overlay_visibility(BOARD_TITLE, true);
-        let show = platform::scoreboard_held();
-        static SHOWN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-        if SHOWN.swap(show, std::sync::atomic::Ordering::Relaxed) != show { platform::log_overlay(BOARD_TITLE, &format!("dibujado mostrar={show}")); }
         egui::CentralPanel::default().frame(egui::Frame::new().fill(Color32::TRANSPARENT)).show(ctx, |ui| {
-            let area = ui.max_rect();
-            let s = area.height() / 1080.;
-            let centre = area.center();
+            if !platform::scoreboard_held() { return; }
+            let scale = ctx.pixels_per_point();
+            // Screen pixels -> points inside this window.
+            let at = |x: f32, y: f32| egui::pos2((x - strip[0]) / scale, (y - strip[1]) / scale);
             let board = board.lock().unwrap();
-            if !show { return; }
             for (row, y) in scoreboard_rows(&board.lobby) {
-                let y = centre.y + y * s;
-                // Rank icon just left of the photo; MMR centred in the gap between the name and the PUNTAJE column.
-                let icon = egui::Rect::from_center_size(egui::pos2(centre.x - 555. * s, y), Vec2::splat(40. * s));
+                let y = cy + y * s;
+                let icon = egui::Rect::from_center_size(at(cx - 555. * s, y), Vec2::splat(40. * s / scale));
                 crate::ranks::rank_icon(ui, icon, row.tier);
-                let at = egui::pos2(centre.x - 149. * s, y);
+                let text = at(cx - 149. * s, y);
+                let font = egui::FontId::proportional(24. * s / scale);
                 // Near-black shadow (pure black is the transparent colour key).
-                ui.painter().text(at + Vec2::splat(1.5 * s), egui::Align2::CENTER_CENTER, &row.mmr, egui::FontId::proportional(24. * s), Color32::from_rgb(12, 12, 14));
-                ui.painter().text(at, egui::Align2::CENTER_CENTER, &row.mmr, egui::FontId::proportional(24. * s), Color32::WHITE);
+                ui.painter().text(text + Vec2::splat(1.5 * s / scale), egui::Align2::CENTER_CENTER, &row.mmr, font.clone(), Color32::from_rgb(12, 12, 14));
+                ui.painter().text(text, egui::Align2::CENTER_CENTER, &row.mmr, font, Color32::WHITE);
             }
         });
     });
