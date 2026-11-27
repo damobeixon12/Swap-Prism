@@ -72,7 +72,7 @@ fn replace_instructions(code: &[u8], pick: impl Fn(&[u8], &(usize, usize, u8, Ve
 }
 
 /// Diagnostic logging of what each avatar receives (Launch.log, category SwapPrism). Off for releases.
-const AVATAR_LOG: bool = true;
+const AVATAR_LOG: bool = false;
 
 /// A runtime-name multiname (MultinameL) over the public namespace: `obj[name]` for a name the movie never uses.
 fn runtime_name(abc: &Abc) -> Option<u32> {

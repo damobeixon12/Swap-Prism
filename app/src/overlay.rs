@@ -200,7 +200,6 @@ fn show_scoreboard(ctx: &egui::Context, board: Arc<Mutex<RankBoard>>) {
     let held = platform::scoreboard_held();
     if SHOWN.swap(held, std::sync::atomic::Ordering::Relaxed) != held {
         ctx.send_viewport_cmd_to(id, egui::ViewportCommand::Visible(held));
-        platform::log_overlay(BOARD_TITLE, &format!("pulsado={held}"));
     }
     ctx.show_viewport_deferred(id, builder, move |ctx, _| {
         ctx.request_repaint_after(Duration::from_millis(100));
