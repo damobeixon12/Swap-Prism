@@ -349,11 +349,11 @@ impl App {
             ui.add_space(12.);
             design::card().show(ui,|ui|{
                 ui.horizontal_wrapped(|ui|{
-                    let mut changed=ui.checkbox(&mut self.overlay_preferences.rank,"Mostrar mi MMR en el juego").changed();
+                    let mut changed=crate::design::toggle(ui,&mut self.overlay_preferences.rank,"Mostrar mi MMR en el juego").changed();
                     ui.add_space(18.);
                     for(id,label)in RANK_ROWS{
                         let mut on=self.overlay_preferences.rank_modes.contains(&id);
-                        if ui.checkbox(&mut on,label).changed(){if on{self.overlay_preferences.rank_modes.push(id);}else{self.overlay_preferences.rank_modes.retain(|m|*m!=id);}changed=true;}
+                        if crate::design::toggle(ui,&mut on,label).changed(){if on{self.overlay_preferences.rank_modes.push(id);}else{self.overlay_preferences.rank_modes.retain(|m|*m!=id);}changed=true;}
                     }
                     if changed{self.save_overlay();}
                 });
@@ -372,7 +372,7 @@ impl App {
                 });
                 design::muted(ui,"Si coincide con la esquina del contador de FPS, se coloca debajo para no taparlo.");
                 ui.add_space(6.);
-                if ui.checkbox(&mut self.overlay_preferences.rank_lobby,"MMR del resto de jugadores en partidas igualadas").changed(){self.save_overlay();}
+                if crate::design::toggle(ui,&mut self.overlay_preferences.rank_lobby,"MMR del resto de jugadores en partidas igualadas").changed(){self.save_overlay();}
                 design::muted(ui,"Se busca su Tracker una vez al empezar y otra al acabar la partida, no durante el juego.");
                 let editing=self.rank_placement.lock().unwrap().editing;
                 if editing{design::muted(ui,"Arrastra el panel a donde quieras (por ejemplo junto a tu nombre) y pulsa Fijar posición.");}
@@ -398,7 +398,7 @@ impl App {
         ui.add_space(16.);
         design::card().show(ui,|ui|{
             design::eyebrow(ui,"FPS DEL JUEGO",design::GREEN());
-            let before=self.overlay_preferences.fps;ui.checkbox(&mut self.overlay_preferences.fps,"Mostrar FPS");
+            let before=self.overlay_preferences.fps;crate::design::toggle(ui,&mut self.overlay_preferences.fps,"Mostrar FPS");
             if before!=self.overlay_preferences.fps{self.telemetry.enable(self.overlay_preferences.fps);self.save_overlay();}
             let reading=self.telemetry.snapshot();design::muted(ui,if self.overlay_preferences.fps{if reading.live_fps().is_some(){"Midiendo fotogramas del juego".into()}else{reading.status.clone()}}else{"Desactivado".into()});
             ui.add_space(10.);draw_metrics(ui,reading.live_fps());

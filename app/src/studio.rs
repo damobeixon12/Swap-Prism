@@ -39,7 +39,7 @@ impl App{
             match self.studio_tab {
                 0=>{
                     
-                    let mut enabled=self.studio_draft["palette"]["enabled"]==true;ui.checkbox(&mut enabled,"Usar más colores en el garaje");self.studio_draft["palette"]["enabled"]=json!(enabled);
+                    let mut enabled=self.studio_draft["palette"]["enabled"]==true;crate::design::toggle(ui,&mut enabled,"Usar más colores en el garaje");self.studio_draft["palette"]["enabled"]=json!(enabled);
                     ui.horizontal_wrapped(|ui|{for(key,label)in [("blue","Equipo azul · primario"),("orange","Equipo naranja · primario"),("accent","Acento · ambos equipos")]{if ui.selectable_label(self.studio_palette==key,label).clicked(){self.studio_palette=key.into();self.studio_slot=0;}}});
                     let key=self.studio_palette.clone();let columns=if key=="accent"{15}else{10};
                     if self.studio_draft["palette"][&key].as_array().map(|v|v.len())!=Some(columns*7){self.studio_draft["palette"][&key]=json!(rich_colors(columns));}
@@ -144,7 +144,7 @@ impl App{
                     const PRESETS:[[u8;3];10]=[[226,75,74],[239,159,39],[250,220,80],[151,196,89],[93,202,165],[55,138,221],[127,119,221],[212,83,126],[240,240,240],[30,30,34]];
                     ui.columns(2,|cols|{
                         let ui=&mut cols[0];
-                        ui.checkbox(&mut enabled,"Usar mi color");
+                        crate::design::toggle(ui,&mut enabled,"Usar mi color");
                         ui.add_space(14.);
                         for row in PRESETS.chunks(5){
                             ui.horizontal(|ui|{ui.spacing_mut().item_spacing.x=10.;for p in row{
@@ -172,7 +172,7 @@ impl App{
                 _=>{
                     
                     d::card().show(ui,|ui|{
-                        let mut enabled=self.studio_draft["season_enabled"]==true;ui.checkbox(&mut enabled,"Usar diseño Swap Prism");self.studio_draft["season_enabled"]=json!(enabled);
+                        let mut enabled=self.studio_draft["season_enabled"]==true;crate::design::toggle(ui,&mut enabled,"Usar diseño Swap Prism");self.studio_draft["season_enabled"]=json!(enabled);
                         let mut season=self.studio_draft["season"].as_u64().unwrap_or(24)as u32;
                         ui.horizontal(|ui|{ui.label("Temporada del diseño");ui.add(egui::DragValue::new(&mut season).range(1..=999));});self.studio_draft["season"]=json!(season);
                         let(r,_)=ui.allocate_exact_size(Vec2::new(ui.available_width(),190.),egui::Sense::hover());ui.painter().rect_filled(r,12,d::BACKGROUND());

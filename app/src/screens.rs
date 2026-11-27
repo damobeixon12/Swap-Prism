@@ -430,7 +430,6 @@ impl App {
         d::card().inner_margin(14).show(ui,|ui|{
             ui.horizontal(|ui|{
                 if let Some(row)=self.donor.as_ref().or(self.target.as_ref()){self.thumb(ui,row,58.);}
-                ui.vertical(|ui|{d::eyebrow(ui,"EQUIPO",d::MUTED());egui::ComboBox::from_id_salt("team").width(92.).selected_text(if self.team==0{"Azul"}else{"Naranja"}).show_ui(ui,|ui|{if ui.selectable_value(&mut self.team,0,"Azul").changed(){self.target=None;}if ui.selectable_value(&mut self.team,1,"Naranja").changed(){self.target=None;}});});
                 ui.vertical(|ui|{d::eyebrow(ui,"COLOR",d::MUTED());ui.add_enabled_ui(self.view!="Body",|ui|{egui::ComboBox::from_id_salt("color").width(110.).selected_text(&self.color).show_ui(ui,|ui|{for c in &self.colors{ui.selectable_value(&mut self.color,c.clone(),c);}});});});
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center),|ui|{
                     let supported=["Body","Decal","Wheels","Rocket Boost","Trail","Goal Explosion","Topper","Antenna","Player Banner","Avatar Border"].contains(&self.view.as_str());
@@ -587,7 +586,7 @@ impl App {
     }
 
     fn changes(&mut self, ui: &mut egui::Ui) {
-        ui.horizontal(|ui|{ui.checkbox(&mut self.changes_history,"Mostrar historial restaurado");if ui.add_enabled(!self.busy&&self.game.is_some(),egui::Button::new("Comprobar archivos")).clicked(){self.call("verify_files",json!({"action":"verify_files","game":self.game}));}});
+        ui.horizontal(|ui|{crate::design::toggle(ui,&mut self.changes_history,"Mostrar historial restaurado");if ui.add_enabled(!self.busy&&self.game.is_some(),egui::Button::new("Comprobar archivos")).clicked(){self.call("verify_files",json!({"action":"verify_files","game":self.game}));}});
         let installed = self
             .state
             .as_object()

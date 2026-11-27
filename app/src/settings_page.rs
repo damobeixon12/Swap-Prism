@@ -30,18 +30,19 @@ impl App{
         out
     }
 
+    /// Name and value on top, full-width filled slider below; ↺ undoes an unsaved change.
     fn slider_row(&mut self,ui:&mut egui::Ui,(key,label,min,max,step,default):(&str,&str,f64,f64,f64,f64)){
-        let current=self.settings_draft[key].as_f64();let mut value=current.unwrap_or(default);
+        let saved=self.game_settings["values"][key].clone();
+        let mut value=self.settings_draft[key].as_f64().unwrap_or(default);
+        let decimals=if step>=1.{0}else if step>=0.1{1}else{2};
         ui.horizontal(|ui|{
-            ui.allocate_ui_with_layout(Vec2::new(220.,28.),egui::Layout::left_to_right(egui::Align::Center),|ui|{
-                ui.set_min_width(220.);ui.label(RichText::new(label).size(15.));
-                if current.is_none(){ui.label(RichText::new("predet.").size(12.).color(d::MUTED()));}
-            });
-            ui.spacing_mut().slider_width=(ui.available_width()-90.).clamp(160.,460.);
-            let decimals=if step>=1.{0}else if step>=0.1{1}else{2};
-            if ui.add(egui::Slider::new(&mut value,min..=max).step_by(step).fixed_decimals(decimals)).changed(){self.settings_draft[key]=json!(value);}
+            ui.label(RichText::new(label).size(15.));
+            if self.settings_draft[key]!=saved&&ui.add(egui::Label::new(RichText::new("↺").size(15.).color(d::MUTED())).sense(egui::Sense::click())).on_hover_text("Deshacer").on_hover_cursor(egui::CursorIcon::PointingHand).clicked(){self.settings_draft[key]=saved.clone();}
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center),|ui|{ui.label(RichText::new(format!("{value:.decimals$}")).strong());});
         });
-        ui.add_space(4.);
+        ui.spacing_mut().slider_width=ui.available_width();
+        if ui.add(egui::Slider::new(&mut value,min..=max).step_by(step).show_value(false)).changed(){self.settings_draft[key]=json!(value);}
+        ui.add_space(14.);
     }
 
     pub(super) fn my_settings(&mut self,ui:&mut egui::Ui){
@@ -54,15 +55,20 @@ impl App{
         let changes=self.setting_changes();
         egui::ScrollArea::vertical().id_salt("my-settings").show(ui,|ui|{
             let width=ui.available_width().min(830.);ui.set_max_width(width);
+            if self.settings_tab==0{
+                // Two quiet blocks: what the camera sees, and how it moves.
+                ui.columns(2,|cols|{
+                    d::card().show(&mut cols[0],|ui|{d::muted(ui,"Vista");ui.add_space(8.);for row in &CAMERA[..4]{self.slider_row(ui,*row);}});
+                    d::card().show(&mut cols[1],|ui|{d::muted(ui,"Movimiento");ui.add_space(8.);for row in &CAMERA[4..]{self.slider_row(ui,*row);}
+                        for(key,label)in[("camera.shake","Vibración"),("camera.invert_swivel","Invertir giro")]{
+                            let mut on=self.settings_draft[key].as_bool().unwrap_or(false);if crate::design::toggle(ui,&mut on,label).changed(){self.settings_draft[key]=json!(on);}
+                            ui.add_space(6.);
+                        }});
+                });
+            }else{
             d::card().show(ui,|ui|{
                 match self.settings_tab{
-                    0=>{for row in CAMERA{self.slider_row(ui,row);}
-                        ui.add_space(6.);
-                        for(key,label)in[("camera.shake","Vibración de cámara"),("camera.invert_swivel","Invertir giro vertical")]{
-                            let mut on=self.settings_draft[key].as_bool().unwrap_or(false);if ui.checkbox(&mut on,label).changed(){self.settings_draft[key]=json!(on);}
-                        }}
-                    1=>{for row in CONTROLS{self.slider_row(ui,row);}
-                        d::muted(ui,"Los botones del mando se cambiarán aquí en una próxima versión.");}
+                    1=>{for row in CONTROLS{self.slider_row(ui,row);}}
                     _=>{
                         ui.horizontal(|ui|{
                             ui.allocate_ui_with_layout(Vec2::new(220.,28.),egui::Layout::left_to_right(egui::Align::Center),|ui|{ui.set_min_width(220.);ui.label(RichText::new("Resolución").size(15.))});
@@ -85,28 +91,27 @@ impl App{
                             egui::ComboBox::from_id_salt("max-fps").selected_text(current.to_string()).show_ui(ui,|ui|{for fps in FPS{if ui.selectable_label(current==fps,fps.to_string()).clicked(){self.settings_draft["video.max_fps"]=json!(fps);}}});
                         });
                         ui.add_space(6.);
-                        let mut vsync=ini_bool(&self.settings_draft["video.vsync"]);if ui.checkbox(&mut vsync,"Sincronización vertical (VSync)").changed(){self.settings_draft["video.vsync"]=json!(if vsync{"True"}else{"False"});}
+                        let mut vsync=ini_bool(&self.settings_draft["video.vsync"]);if crate::design::toggle(ui,&mut vsync,"Sincronización vertical (VSync)").changed(){self.settings_draft["video.vsync"]=json!(if vsync{"True"}else{"False"});}
                         for(key,label)in[("video.weather","Efectos del tiempo"),("video.light_shafts","Rayos de luz"),("video.lens_flares","Destellos de lente")]{
-                            let mut on=self.settings_draft[key].as_bool().unwrap_or(false);if ui.checkbox(&mut on,label).changed(){self.settings_draft[key]=json!(on);}
+                            let mut on=self.settings_draft[key].as_bool().unwrap_or(false);if crate::design::toggle(ui,&mut on,label).changed(){self.settings_draft[key]=json!(on);}
                         }
                     }
                 }
             });
+            }
             ui.add_space(16.);
-            ui.horizontal_wrapped(|ui|{
-                let can=!changes.is_empty()&&!self.busy&&!self.running;
-                let save=ui.add_enabled(can,d::primary(&if changes.is_empty(){"Guardar".to_owned()}else{format!("Guardar {} cambio{}",changes.len(),if changes.len()==1{""}else{"s"})}));
+            // Save only shows up once something changed.
+            if !changes.is_empty(){ui.with_layout(egui::Layout::right_to_left(egui::Align::Center),|ui|{
+                let can=!self.busy&&!self.running;
+                let save=ui.add_enabled(can,d::primary("Guardar cambios"));
                 let save=if self.running{save.on_disabled_hover_text("Cierra Rocket League: el juego reescribe sus ajustes al salir.")}else{save};
                 if save.clicked(){
                     let mut out=serde_json::Map::new();
                     for(k,v)in changes.iter(){out.insert(k.clone(),if k=="video.res_x"||k=="video.res_y"{json!(ini_int(v))}else if k.starts_with("video.")&&v.is_string(){json!(ini_bool(v))}else{v.clone()});}
                     self.call("game_settings_write",json!({"action":"game_settings_write","changes":out}));
                 }
-                if ui.add_enabled(!changes.is_empty()&&!self.busy,egui::Button::new(RichText::new("Descartar").color(d::MUTED())).frame(false)).clicked(){self.settings_draft=self.game_settings["values"].clone();}
-                if ui.add_enabled(!self.busy,egui::Button::new(RichText::new("Volver a leer").color(d::MUTED())).frame(false)).clicked(){self.game_settings=Value::Null;self.settings_loading=false;}
-            });
-            ui.add_space(6.);
-            d::muted(ui,"Se guarda en tu partida guardada con el juego cerrado. Antes se hace una copia en data/settings_backups.");
+                if ui.add_enabled(!self.busy,d::button("Descartar",d::MUTED())).clicked(){self.settings_draft=self.game_settings["values"].clone();}
+            });}
         });
     }
 

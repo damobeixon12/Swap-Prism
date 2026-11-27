@@ -51,7 +51,7 @@ impl App{
                 ui.horizontal_wrapped(|ui|{
                     ui.vertical(|ui|{ui.label("Modalidad");egui::ComboBox::from_id_salt("fake-playlist").selected_text(MODES.iter().find(|(id,_)|*id==mode).map(|(_,l)|*l).unwrap_or("2v2 · Doubles")).show_ui(ui,|ui|{for(id,label)in MODES{ui.selectable_value(&mut mode,id,label);}});});
                     ui.vertical(|ui|{ui.label("Elo / MMR visual");ui.add(egui::DragValue::new(&mut mmr).range(0..=10000).speed(1));});
-                    ui.checkbox(&mut auto,"Rango automático · escala visual");
+                    crate::design::toggle(ui,&mut auto,"Rango automático · escala visual");
                 });
                 if auto{tier=visual_tier(mmr);}
                 ui.horizontal_wrapped(|ui|{

@@ -95,8 +95,8 @@ impl App {
                 });
                 ui.horizontal_wrapped(|ui|{
                     let mut multi=self.title_draft["multicolor"]==true;let mut glowing=self.title_draft["glow_enabled"]!=false;
-                    if ui.checkbox(&mut multi,"Multicolor").changed(){self.title_draft["multicolor"]=json!(multi);changed=true;}
-                    if ui.checkbox(&mut glowing,"Con resplandor").changed(){self.title_draft["glow_enabled"]=json!(glowing);changed=true;}
+                    if crate::design::toggle(ui,&mut multi,"Multicolor").changed(){self.title_draft["multicolor"]=json!(multi);changed=true;}
+                    if crate::design::toggle(ui,&mut glowing,"Con resplandor").changed(){self.title_draft["glow_enabled"]=json!(glowing);changed=true;}
                 });
             });
             ui.add_space(12.);

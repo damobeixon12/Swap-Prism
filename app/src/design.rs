@@ -3,7 +3,8 @@ use std::sync::atomic::{AtomicUsize,Ordering};
 pub struct Theme{pub name:&'static str,bg:[u8;3],side:[u8;3],panel:[u8;3],field:[u8;3],line:[u8;3],text:[u8;3],muted:[u8;3],accent:[u8;3]}
 const DARK:([u8;3],[u8;3],[u8;3],[u8;3],[u8;3],[u8;3],[u8;3])=([11,13,16],[14,16,20],[19,22,26],[9,11,14],[34,38,44],[232,234,237],[138,145,156]);
 const fn dark(name:&'static str,accent:[u8;3])->Theme{Theme{name,bg:DARK.0,side:DARK.1,panel:DARK.2,field:DARK.3,line:DARK.4,text:DARK.5,muted:DARK.6,accent}}
-pub const THEMES:[Theme;6]=[
+pub const THEMES:[Theme;7]=[
+    dark("Grafito",[232,234,237]),
     dark("Menta",[126,207,160]),
     dark("Océano",[110,172,255]),
     dark("Violeta",[172,142,255]),
@@ -67,6 +68,9 @@ pub fn setup(ctx: &egui::Context) {
     visual.widgets.noninteractive.bg_stroke = Stroke::NONE;
     visual.window_stroke = Stroke::new(1_f32, LINE());
     visual.window_corner_radius = egui::CornerRadius::same(12);
+    // Sliders: filled up to the value, small round handle.
+    visual.slider_trailing_fill = true;
+    visual.handle_shape = egui::style::HandleShape::Circle;
     ctx.set_visuals(visual);
     let mut style = (*ctx.style()).clone();
     style.spacing.item_spacing = Vec2::new(12., 10.);
@@ -137,38 +141,49 @@ pub fn card() -> Surface {
 }
 pub fn button(label: &str, tone: Color32) -> egui::Button<'_> {
     egui::Button::new(RichText::new(label).color(tone))
-        .fill(FIELD())
-        .stroke(Stroke::new(1_f32, LINE()))
-        .corner_radius(8)
+        .fill(LINE().gamma_multiply(0.7))
+        .stroke(Stroke::NONE)
+        .corner_radius(99)
         .min_size(Vec2::new(0., 40.))
+}
+/// On/off switch (replaces checkboxes): animated pill, label beside it, both clickable.
+pub fn toggle(ui: &mut egui::Ui, on: &mut bool, label: impl Into<egui::WidgetText>) -> egui::Response {
+    let label = label.into();
+    ui.horizontal(|ui| {
+        let (rect, mut response) = ui.allocate_exact_size(Vec2::new(40., 24.), egui::Sense::click());
+        let text = ui.add(egui::Label::new(label).sense(egui::Sense::click()));
+        if response.clicked() || text.clicked() { *on = !*on; response.mark_changed(); }
+        let t = ui.ctx().animate_bool_with_time(response.id, *on, 0.15);
+        let lerp = |a: Color32, b: Color32| Color32::from_rgb(
+            (a.r() as f32 + (b.r() as f32 - a.r() as f32) * t) as u8,
+            (a.g() as f32 + (b.g() as f32 - a.g() as f32) * t) as u8,
+            (a.b() as f32 + (b.b() as f32 - a.b() as f32) * t) as u8);
+        ui.painter().rect_filled(rect, 12, lerp(LINE(), GREEN()));
+        let x = rect.left() + 12. + (rect.width() - 24.) * t;
+        ui.painter().circle_filled(egui::pos2(x, rect.center().y), 9., lerp(MUTED(), BACKGROUND()));
+        response.union(text).on_hover_cursor(egui::CursorIcon::PointingHand)
+    }).inner
 }
 /// Filled call-to-action in the theme accent («Aplicar»).
 pub fn primary(label: &str) -> egui::Button<'_> {
     egui::Button::new(RichText::new(label).color(ON_ACCENT()).strong())
         .fill(GREEN())
         .stroke(Stroke::NONE)
-        .corner_radius(8)
+        .corner_radius(99)
         .min_size(Vec2::new(0., 40.))
 }
-/// Underlined page tabs as in the profile mock-up; returns the clicked index.
+/// Page tabs as quiet pills; returns the clicked index.
 pub fn tabs(ui: &mut egui::Ui, labels: &[&str], selected: usize) -> Option<usize> {
     let mut clicked = None;
     ui.horizontal_wrapped(|ui| {
-        ui.spacing_mut().item_spacing = Vec2::new(26., 18.);
+        ui.spacing_mut().item_spacing = Vec2::new(8., 8.);
         for (i, label) in labels.iter().enumerate() {
             let active = i == selected;
-            let text = RichText::new(*label).size(15.).color(if active { TEXT() } else { MUTED() });
-            let response = ui.add(egui::Label::new(text).sense(egui::Sense::click())).on_hover_cursor(egui::CursorIcon::PointingHand);
-            if active {
-                let r = response.rect;
-                ui.painter().rect_filled(egui::Rect::from_min_max(egui::pos2(r.left(), r.bottom() + 9.), egui::pos2(r.right(), r.bottom() + 11.)), 1, GREEN());
-            }
-            if response.clicked() { clicked = Some(i); }
+            let text = RichText::new(*label).size(14.).color(if active { BACKGROUND() } else { MUTED() });
+            let button = egui::Button::new(text).fill(if active { TEXT() } else { PANEL() }).stroke(Stroke::NONE).corner_radius(99).min_size(Vec2::new(0., 34.));
+            if ui.add(button).on_hover_cursor(egui::CursorIcon::PointingHand).clicked() { clicked = Some(i); }
         }
     });
-    ui.add_space(10.);
-    let y = ui.cursor().min.y;
-    ui.painter().hline(ui.max_rect().x_range(), y, Stroke::new(1_f32, LINE()));
     ui.add_space(22.);
     clicked
 }

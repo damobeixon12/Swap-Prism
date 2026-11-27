@@ -17,7 +17,7 @@ impl App {
         ui.horizontal(|ui|{
             ui.add(egui::TextEdit::singleline(&mut self.workshop_query).hint_text("Buscar mapa…").desired_width((ui.available_width()-330.).max(180.)));
             egui::ComboBox::from_id_salt("workshop-sort").selected_text(if self.workshop_sort==0{"Más descargados"}else{"Nombre"}).show_ui(ui,|ui|{ui.selectable_value(&mut self.workshop_sort,0,"Más descargados");ui.selectable_value(&mut self.workshop_sort,1,"Nombre");});
-            ui.checkbox(&mut self.workshop_downloaded,"Descargados");
+            crate::design::toggle(ui,&mut self.workshop_downloaded,"Descargados");
         });
         d::muted(ui,"Solo reemplaza Utopia Retro. Después de aplicar, ábrelo en Entrenamiento libre → Balón rueda. Los demás estadios se conservan.");
         let query=self.workshop_query.to_lowercase();
