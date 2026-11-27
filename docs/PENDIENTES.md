@@ -9,11 +9,14 @@ Estado a 0.29.1. Detalle técnico de cada punto en `docs/historial/`.
 - **Cambio de modelo (Body)** con dependencias visuales del donante, para evitar coches invisibles. `UPDATE_017.md`.
 - **Actualizador nativo**: reinicio final de 0.29.0 → 0.29.1. `UPDATER_029.md`.
 
-## Sin hacer
+## Descartado (27/11/2026)
 
-- **Ping y MMR reales en el overlay**: no hay todavía una fuente de datos verificable. `STEP3_1.md`, `SHIFT_TRACKER_REVIEW.md`.
-- **Auto GG**.
-- **Texto «BOOM» naranja de Air Strike**: material compartido `Boost_Tests.Materials.Boom_Text_MIC`; investigado, sin corregir.
+El usuario no quiere: ping y MMR reales en el overlay, Auto GG, texto «BOOM» naranja de Air Strike
+(investigado: material compartido `Boost_Tests.Materials.Boom_Text_MIC`).
+
+## Siguiente
+
+- **App en inglés** (0.34.0): pasar todos los textos a un archivo de traducciones.
 
 ## Lecciones que no hay que repetir
 

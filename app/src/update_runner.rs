@@ -3,7 +3,7 @@ use std::{fs::{self,File},io::{Read,Write},path::{Path,PathBuf},process::Command
 use eframe::egui;
 use sha2::{Digest,Sha256};
 use windows_sys::Win32::{Foundation::{CloseHandle,GetLastError},System::Threading::{OpenProcess,WaitForSingleObject},UI::WindowsAndMessaging::{MessageBoxW,MB_ICONERROR,MB_OK}};
-#[path="design.rs"]mod design;
+#[allow(dead_code)]#[path="design.rs"]mod design;
 #[derive(Clone)]struct Config{pid:u32,installer:PathBuf,root:PathBuf,hash:String}
 #[derive(Clone)]struct Status{fraction:f32,label:String,error:String,done:bool}
 fn verify(installer:&Path,root:&Path,expected:&str)->Result<(),String>{

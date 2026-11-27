@@ -272,6 +272,113 @@ pub fn save_config(root: &Path, v: &Value) -> Result<(), String> {
     fs::rename(path, root.join("data/settings.json")).map_err(|e| e.to_string())
 }
 
+// ---------- tray icon and start with Windows ----------
+use std::sync::atomic::{AtomicBool, AtomicIsize, Ordering};
+use windows_sys::Win32::UI::{Shell::*, WindowsAndMessaging::*};
+
+/// Set by the tray; the F8 thread acts on them (it can reach the window even while it is hidden).
+pub static TRAY_TOGGLE: AtomicBool = AtomicBool::new(false);
+pub static TRAY_EXIT: AtomicBool = AtomicBool::new(false);
+static TRAY_WINDOW: AtomicIsize = AtomicIsize::new(0);
+const TRAY_MESSAGE: u32 = WM_APP + 1;
+
+fn wide(text: &str) -> Vec<u16> { text.encode_utf16().chain(Some(0)).collect() }
+
+/// Is the main window («Swap Prism») shown right now.
+pub fn main_window_visible() -> bool {
+    let title = wide("Swap Prism");
+    unsafe { let window = FindWindowW(std::ptr::null(), title.as_ptr()); !window.is_null() && IsWindowVisible(window) != 0 }
+}
+
+unsafe extern "system" fn tray_procedure(window: windows_sys::Win32::Foundation::HWND, message: u32, wparam: usize, lparam: isize) -> isize {
+    if message == TRAY_MESSAGE {
+        match lparam as u32 {
+            WM_LBUTTONUP => TRAY_TOGGLE.store(true, Ordering::Relaxed),
+            WM_RBUTTONUP => {
+                let menu = CreatePopupMenu();
+                let (show, exit) = (wide("Mostrar / ocultar  (F8)"), wide("Salir"));
+                AppendMenuW(menu, MF_STRING, 1, show.as_ptr());
+                AppendMenuW(menu, MF_STRING, 2, exit.as_ptr());
+                let mut point = std::mem::zeroed();
+                GetCursorPos(&mut point);
+                SetForegroundWindow(window); // otherwise the menu does not close when clicking elsewhere
+                let choice = TrackPopupMenu(menu, TPM_RETURNCMD | TPM_RIGHTBUTTON, point.x, point.y, 0, window, std::ptr::null());
+                PostMessageW(window, WM_NULL, 0, 0);
+                DestroyMenu(menu);
+                match choice { 1 => TRAY_TOGGLE.store(true, Ordering::Relaxed), 2 => TRAY_EXIT.store(true, Ordering::Relaxed), _ => {} }
+            }
+            _ => {}
+        }
+        return 0;
+    }
+    DefWindowProcW(window, message, wparam, lparam)
+}
+
+fn tray_data(window: windows_sys::Win32::Foundation::HWND) -> NOTIFYICONDATAW {
+    let mut data: NOTIFYICONDATAW = unsafe { std::mem::zeroed() };
+    data.cbSize = std::mem::size_of::<NOTIFYICONDATAW>() as u32;
+    data.hWnd = window;
+    data.uID = 1;
+    data
+}
+
+/// Tray icon on its own thread (hidden window + message loop). `rgba` is a 32×32 picture.
+pub fn tray(rgba: Vec<u8>) {
+    std::thread::spawn(move || unsafe {
+        let class = wide("SwapPrismTray");
+        let mut kind: WNDCLASSW = std::mem::zeroed();
+        kind.lpfnWndProc = Some(tray_procedure);
+        kind.lpszClassName = class.as_ptr();
+        RegisterClassW(&kind);
+        let title = wide("Swap Prism tray");
+        let window = CreateWindowExW(0, class.as_ptr(), title.as_ptr(), 0, 0, 0, 0, 0, std::ptr::null_mut(), std::ptr::null_mut(), std::ptr::null_mut(), std::ptr::null());
+        if window.is_null() { return; }
+        let bgra: Vec<u8> = rgba.chunks(4).flat_map(|p| [p[2], p[1], p[0], p[3]]).collect();
+        let mask = [0u8; 32 * 32 / 8];
+        let mut data = tray_data(window);
+        data.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
+        data.uCallbackMessage = TRAY_MESSAGE;
+        data.hIcon = CreateIcon(std::ptr::null_mut(), 32, 32, 1, 32, mask.as_ptr(), bgra.as_ptr());
+        for (slot, unit) in data.szTip.iter_mut().zip(wide("Swap Prism · F8 para mostrar u ocultar")) { *slot = unit; }
+        if Shell_NotifyIconW(NIM_ADD, &data) == 0 { return; }
+        TRAY_WINDOW.store(window as isize, Ordering::Relaxed);
+        let mut message: MSG = std::mem::zeroed();
+        while GetMessageW(&mut message, std::ptr::null_mut(), 0, 0) > 0 { DispatchMessageW(&message); }
+    });
+}
+
+/// Takes the icon away on exit (otherwise it lingers until the mouse passes over it).
+pub fn tray_remove() {
+    let window = TRAY_WINDOW.swap(0, Ordering::Relaxed);
+    if window != 0 { unsafe { Shell_NotifyIconW(NIM_DELETE, &tray_data(window as _)); } }
+}
+
+const RUN_KEY: &str = "Software\\Microsoft\\Windows\\CurrentVersion\\Run";
+const RUN_VALUE: &str = "Swap Prism";
+
+/// Starts with Windows (current user only), hidden in the tray.
+pub fn autostart() -> bool {
+    use windows_sys::Win32::System::Registry::*;
+    let (key, value) = (wide(RUN_KEY), wide(RUN_VALUE));
+    let mut size = 0u32;
+    unsafe { RegGetValueW(HKEY_CURRENT_USER, key.as_ptr(), value.as_ptr(), RRF_RT_REG_SZ, std::ptr::null_mut(), std::ptr::null_mut(), &mut size) == 0 }
+}
+
+pub fn set_autostart(on: bool) -> Result<(), String> {
+    use windows_sys::Win32::System::Registry::*;
+    let (key, value) = (wide(RUN_KEY), wide(RUN_VALUE));
+    let code = unsafe {
+        if on {
+            let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+            let command = wide(&format!("\"{}\" --tray", exe.display()));
+            RegSetKeyValueW(HKEY_CURRENT_USER, key.as_ptr(), value.as_ptr(), REG_SZ, command.as_ptr().cast(), (command.len() * 2) as u32)
+        } else {
+            RegDeleteKeyValueW(HKEY_CURRENT_USER, key.as_ptr(), value.as_ptr())
+        }
+    };
+    if code == 0 || (!on && code == 2) { Ok(()) } else { Err(format!("No se pudo cambiar el inicio con Windows (código {code}).")) }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

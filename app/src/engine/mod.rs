@@ -17,6 +17,7 @@ pub mod media;
 pub mod profile;
 pub mod save;
 pub mod state;
+pub mod storage;
 pub mod studio;
 pub mod textures;
 pub mod upk;
@@ -39,6 +40,8 @@ pub fn handle(root: &Path, request: &Value, progress: &dyn Fn(Value)) -> Result<
         "workshop_import" => workshop::import_map(root, Path::new(request["path"].as_str().unwrap_or("")), None),
         "workshop_remove" => workshop::remove(root, request["key"].as_str().unwrap_or("")),
         "bootstrap" => bootstrap(root),
+        "storage" => storage::report(root),
+        "storage_clean" => storage::clean(root),
         "apply" => apply::apply(root, request, progress),
         "refresh_state" => state::inspect_state(&root.join("data")).map(|s| serde_json::json!({"state": s})),
         "open_epic" => util::shell_open("com.epicgames.launcher://store/library").map(|_| serde_json::json!({"opened": true})),

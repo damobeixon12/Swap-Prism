@@ -191,7 +191,6 @@ pub struct Package {
     pub chunks_offset: i32,
     pub nonce: Option<Vec<u8>>,
     pub stride: usize,
-    pub enc_size: usize,
     pub enc_aligned: usize,
     pub key: Vec<u8>,
     pub header: Vec<u8>,
@@ -308,7 +307,7 @@ impl Package {
             exports.push(header[cursor..cursor + length as usize].to_vec());
             cursor += length as usize;
         }
-        Ok(Package { file: file.to_path_buf(), summary, meta_offset, garbage_size, chunks_offset, nonce, stride, enc_size, enc_aligned, key, header, chunks, names, name_flags, names_end, imports, exports, exports_end: cursor, raw, flat: std::sync::OnceLock::new() })
+        Ok(Package { file: file.to_path_buf(), summary, meta_offset, garbage_size, chunks_offset, nonce, stride, enc_aligned, key, header, chunks, names, name_flags, names_end, imports, exports, exports_end: cursor, raw, flat: std::sync::OnceLock::new() })
     }
 
     pub fn fname(&self, index: i32, instance: i32) -> String {

@@ -13,7 +13,6 @@ impl App {
     }
     pub fn render(&mut self, ctx: &egui::Context) {
         let search_id=egui::Id::new("sidebar-search");
-        if ctx.input_mut(|i|i.consume_key(egui::Modifiers::CTRL,egui::Key::K)){ctx.memory_mut(|m|m.request_focus(search_id));}
         let side=egui::SidePanel::left("main-navigation").exact_width(250.).resizable(false)
             .frame(egui::Frame::new().fill(d::SIDEBAR()).inner_margin(egui::Margin{left:16,right:16,top:20,bottom:14})).show(ctx,|ui|{
                 ui.horizontal(|ui|{ui.add(egui::Image::new(egui::include_image!("../assets/logo.png")).fit_to_exact_size(Vec2::splat(28.)).corner_radius(7));ui.label(RichText::new("Swap Prism").strong().size(17.));});
@@ -85,6 +84,10 @@ impl App {
                 }
             });
         if pending>0{self.apply_bar(ctx,pending);}
+        self.reset_bar(ctx);
+        self.search_palette(ctx);
+        self.dropped_files(ctx);
+        self.welcome(ctx);
         self.splash(ctx);
     }
 
@@ -118,11 +121,11 @@ impl App {
         if sweep>0.{
             let steps=(96.*sweep).max(2.) as usize;
             let points:Vec<egui::Pos2>=(0..=steps).map(|k|{let a=-std::f32::consts::FRAC_PI_2+std::f32::consts::TAU*sweep*k as f32/steps as f32;center+Vec2::new(a.cos(),a.sin())*radius}).collect();
-            painter.add(egui::Shape::line(points,egui::Stroke::new(2.5,accent.gamma_multiply(0.9*out))));
+            painter.add(egui::Shape::line(points,egui::Stroke::new(2.5_f32,accent.gamma_multiply(0.9*out))));
         }
         // Pulse once the ring closes.
         let pulse=phase(1.1,1.75);
-        if pulse>0.&&pulse<1.{painter.circle_stroke(center,radius+70.*ease(pulse),egui::Stroke::new(2.,accent.gamma_multiply(0.45*(1.-pulse)*out)));}
+        if pulse>0.&&pulse<1.{painter.circle_stroke(center,radius+70.*ease(pulse),egui::Stroke::new(2_f32,accent.gamma_multiply(0.45*(1.-pulse)*out)));}
         // Name: letters rise one after another.
         let font=d::bold(34.);let spacing=7.;
         let letters:Vec<_>="SWAP PRISM".chars().map(|c|painter.layout_no_wrap(c.to_string(),font.clone(),Color32::WHITE)).collect();
@@ -137,7 +140,7 @@ impl App {
         }
         // Line opening from the centre under the name.
         let open=ease(phase(1.25,1.9));
-        if open>0.{let half=width/2.*open;let y=base+52.;painter.line_segment([egui::pos2(screen.center().x-half,y),egui::pos2(screen.center().x+half,y)],egui::Stroke::new(2.,accent.gamma_multiply(0.8*out)));}
+        if open>0.{let half=width/2.*open;let y=base+52.;painter.line_segment([egui::pos2(screen.center().x-half,y),egui::pos2(screen.center().x+half,y)],egui::Stroke::new(2_f32,accent.gamma_multiply(0.8*out)));}
     }
 
     /// Sub-pages of the current section, as underlined tabs under the title.
@@ -201,10 +204,19 @@ impl App {
                     if ui.add(egui::Label::new(RichText::new("Ver").color(d::MUTED())).sense(egui::Sense::click())).on_hover_cursor(egui::CursorIcon::PointingHand).clicked(){self.go_to("Queue");}
                     ui.add_space(6.);
                     if ui.add_enabled(!self.busy,egui::Button::new(RichText::new("Descartar").color(d::MUTED())).frame(false)).clicked(){self.discard_pending();}
-                    let dirty=self.studio_dirty();let can=!self.busy&&!self.running&&self.game.is_some();
-                    let apply=ui.add_enabled(can,d::primary("Aplicar"));self.apply_anchor=apply.rect;
-                    let apply=if self.running{apply.on_disabled_hover_text("Cierra Rocket League para aplicar.")}else if self.game.is_none(){apply.on_disabled_hover_text("Elige la carpeta del juego en Ajustes.")}else{apply};
-                    if apply.clicked(){self.call("apply",json!({"action":"apply","game":self.game,"version":self.game_version,"team":if self.team==0{"Blue"}else{"Orange"},"plans":self.plans.values().collect::<Vec<_>>(),"studio_settings":if dirty{self.studio_draft.clone()}else{Value::Null},"profile_settings":self.profile_pending.clone()}));}
+                    // With the game open, Aplicar waits and runs by itself once the game closes.
+                    if self.apply_waiting==Some("queue"){
+                        d::muted(ui,"Se aplicará al cerrar el juego");
+                        if ui.add(d::button("Cancelar",d::MUTED())).clicked(){self.apply_waiting=None;}
+                        return;
+                    }
+                    let can=!self.busy&&self.game.is_some()&&self.apply_waiting.is_none();
+                    let apply=ui.add_enabled(can,d::primary(if self.running{"Aplicar al cerrar el juego"}else{"Aplicar"}));self.apply_anchor=apply.rect;
+                    let apply=if self.game.is_none(){apply.on_disabled_hover_text("Elige la carpeta del juego en Ajustes.")}else{apply};
+                    if apply.clicked(){
+                        if self.running{self.apply_waiting=Some("queue");self.status="Se aplicará en cuanto cierres Rocket League.".into();}
+                        else{let request=self.queue_request();self.call("apply",request);}
+                    }
                 });
             });
         });
@@ -377,7 +389,7 @@ impl App {
     }
 
     fn item_list(
-        &self,
+        &mut self,
         ui: &mut egui::Ui,
         id: &str,
         rows: &[Value],
@@ -419,10 +431,12 @@ impl App {
                             if id == "owned" && equipped == row["ID"].as_u64() {
                                 ui.painter().circle_filled(rect.right_top() + Vec2::new(-12., 12.), 4., d::GREEN());
                             }
+                            let hovered = response.hovered();
                             if response.clicked() { choice = Some(row.clone()); }
-                            if self.design_dir.is_none() {
-                                let note = format!("{}  ·  #{}{}{}", s(row, "Product"), row["ID"], if id == "owned" && equipped == row["ID"].as_u64() { "  ·  Equipado" } else { "" }, if s(row, "AssetPackage").is_empty() { "  ·  Solo consulta" } else { "" });
-                                response.on_hover_text(note);
+                            self.favorite_star(ui, rect.left_top() + Vec2::new(16., 16.), &format!("item:{}", row["ID"]), hovered);
+                            if self.design_dir.is_none() && hovered {
+                                let note = format!("#{}{}{}", row["ID"], if id == "owned" && equipped == row["ID"].as_u64() { "  ·  Equipado" } else { "" }, if s(row, "AssetPackage").is_empty() { "  ·  Solo consulta" } else { "" });
+                                response.on_hover_ui(|ui| self.item_hover(ui, row, &note));
                             }
                         }
                     });
@@ -492,7 +506,7 @@ impl App {
             });
             d::card().inner_margin(14).show(&mut columns[1], |ui| {
                 ui.set_min_height(height);
-                d::eyebrow(ui, "02 / NUEVA APARIENCIA", d::PURPLE());
+                ui.horizontal(|ui|{d::eyebrow(ui, "02 / NUEVA APARIENCIA", d::PURPLE());ui.with_layout(egui::Layout::right_to_left(egui::Align::Center),|ui|{crate::design::toggle(ui,&mut self.only_favorites,"Favoritos");});});
                 d::search(ui, &mut self.query, "Busca una apariencia por nombre o ID");
                 let query = self.query.to_lowercase();
                 let rows: Vec<_> = self
@@ -500,6 +514,7 @@ impl App {
                     .iter()
                     .filter(|r| {
                         s(r, "Slot") == self.view
+                            && (!self.only_favorites || self.is_favorite(&format!("item:{}", r["ID"])))
                             && format!("{} {}", s(r, "Product"), r["ID"])
                                 .to_lowercase()
                                 .contains(&query)
@@ -579,13 +594,14 @@ impl App {
             }
         });
         ui.add_space(6.);
-        d::search(ui, &mut self.pack_query, "Buscar en esta categoría");
+        ui.horizontal(|ui|{ui.add(egui::TextEdit::singleline(&mut self.pack_query).hint_text("Buscar en esta categoría").margin(Vec2::new(12.,10.)).desired_width((ui.available_width()-140.).max(160.)));crate::design::toggle(ui,&mut self.only_favorites,"Favoritos");});
         let query = self.pack_query.to_lowercase();
         let mut packs: Vec<_> = self
             .packs
             .iter()
             .filter(|p| {
                 s(p, "category") == self.texture_category
+                    && (!self.only_favorites || self.is_favorite(&format!("pack:{}", s(p, "digest"))))
                     && s(p, "name").to_lowercase().contains(&query)
             })
             .cloned()
@@ -598,9 +614,10 @@ impl App {
         let count = d::columns(ui.available_width());
         egui::ScrollArea::vertical().id_salt("texture-grid").show(ui,|ui|{
             for chunk in packs.chunks(count){ui.columns(count,|columns|{for(i,pack)in chunk.iter().enumerate(){d::card().inner_margin(14).show(&mut columns[i],|ui|{
-                let width=ui.available_width();let rect=ui.allocate_exact_size(Vec2::new(width,126.),egui::Sense::hover()).0;
+                let width=ui.available_width();let(rect,hover)=ui.allocate_exact_size(Vec2::new(width,126.),egui::Sense::hover());
                 ui.painter().rect_filled(rect,12,d::BACKGROUND());
                 ui.put(rect.shrink(8.),egui::Image::from_uri(format!("file://{}",s(pack,"preview"))).max_size(Vec2::new(width-16.,110.)));
+                self.favorite_star(ui,rect.right_top()+Vec2::new(-18.,18.),&format!("pack:{}",s(pack,"digest")),hover.hovered());
                 let title=ui.add_sized([width,40.],egui::Label::new(RichText::new(s(pack,"name")).strong().size(15.)).wrap());
                 if title.clicked(){self.selected_texture_name=s(pack,"name").into();}
                 let enabled=!self.busy&&(self.texture_category!="Decal"||self.texture_target.is_some());
@@ -613,7 +630,10 @@ impl App {
     }
 
     fn changes(&mut self, ui: &mut egui::Ui) {
-        ui.horizontal(|ui|{crate::design::toggle(ui,&mut self.changes_history,"Mostrar historial restaurado");if ui.add_enabled(!self.busy&&self.game.is_some(),egui::Button::new("Comprobar archivos")).clicked(){self.call("verify_files",json!({"action":"verify_files","game":self.game}));}});
+        ui.horizontal(|ui|{crate::design::toggle(ui,&mut self.changes_history,"Mostrar historial restaurado");if ui.add_enabled(!self.busy&&self.game.is_some(),egui::Button::new("Comprobar y reparar")).clicked(){self.call("verify_files",json!({"action":"verify_files","game":self.game}));}});
+        ui.add_space(10.);
+        self.sets_card(ui);
+        ui.add_space(10.);
         let installed = self
             .state
             .as_object()
@@ -760,11 +780,14 @@ impl App {
             self.item_list(ui, "inventory", &rows, None);
             return;
         }
-        egui::ScrollArea::vertical().id_salt("settings-scroll").show(ui,|ui|{
+        let mut area=egui::ScrollArea::vertical().id_salt("settings-scroll");
+        // Dev check: SP_SHOT_SCROLL=<px> scrolls Ajustes in --screenshot mode.
+        if let Some(y)=std::env::var("SP_SHOT_SCROLL").ok().and_then(|v|v.parse().ok()).filter(|_|self.shot.is_some()){area=area.vertical_scroll_offset(y);}
+        area.show(ui,|ui|{
             d::card().show(ui,|ui|{
                 d::eyebrow(ui,"ROCKET LEAGUE",d::CYAN());ui.heading("Tu juego, conectado");ui.add_space(10.);
                 if let Some(path)=&self.game{d::muted(ui,path.display().to_string());}else{d::muted(ui,"No se ha encontrado el juego. Selecciona la carpeta rocketleague, que contiene Binaries y TAGame.");}
-                if ui.button("Elegir carpeta del juego").clicked(){if let Some(path)=rfd::FileDialog::new().set_title("Elige rocketleague (contiene Binaries y TAGame)").pick_folder(){if platform::valid_game(&path){self.game=Some(path.clone());self.config["game_path"]=json!(path);self.status=platform::save_config(&self.root,&self.config).err().unwrap_or("Ruta guardada.".into());}else{self.status="Elige la carpeta rocketleague que contiene Binaries y TAGame.".into();}}}
+                if ui.button("Elegir carpeta del juego").clicked(){self.pick_game_folder();}
             });ui.add_space(12.);
             self.catalog_card(ui);ui.add_space(12.);
             if self.launcher_state.is_null()&&!self.launcher_loading&&!self.busy{self.launcher_loading=true;self.call("launcher_status",json!({"action":"launcher_status","game":self.game}));}
@@ -802,15 +825,16 @@ impl App {
                     }
                 });
             });ui.add_space(12.);
+            self.comfort_settings(ui);ui.add_space(12.);
             d::card().show(ui,|ui|{
-                d::eyebrow(ui,"EMERGENCIA",d::RED());ui.heading("Verificar archivos");
-                d::muted(ui,"Si algo no se aplica o da error: compara cada paquete con el original de Epic. No borra tus cambios ni tu selección.");ui.add_space(10.);
+                d::eyebrow(ui,"EMERGENCIA",d::RED());ui.heading("Comprobar y reparar");
+                d::muted(ui,"Si algo no se aplica o da error. Repara las copias de Swap Prism y te dice qué archivos están mal. No borra tus cambios.");ui.add_space(10.);
                 ui.horizontal_wrapped(|ui|{
-                    if ui.add_enabled(!self.busy&&self.game.is_some(),egui::Button::new("Comprobar archivos")).clicked(){self.call("verify_files",json!({"action":"verify_files","game":self.game}));}
+                    if ui.add_enabled(!self.busy&&self.game.is_some(),d::button("Comprobar y reparar",d::TEXT())).clicked(){self.call("verify_files",json!({"action":"verify_files","game":self.game}));}
                     if ui.add_enabled(!self.busy,egui::Button::new("Abrir Epic Games")).clicked(){self.call("open_epic",json!({"action":"open_epic"}));}
                 });
                 if let Some(list)=self.file_check["modified"].as_array(){if !list.is_empty(){
-                    ui.add_space(8.);d::muted(ui,"Modificados fuera de Swap Prism. En Epic: Biblioteca → Rocket League → ⋯ → Gestionar → Verificar. Después pulsa Comprobar archivos otra vez.");
+                    ui.add_space(8.);d::muted(ui,"Modificados fuera de Swap Prism. En Epic: Biblioteca → Rocket League → ⋯ → Gestionar → Verificar. Después pulsa Comprobar y reparar otra vez.");
                     for name in list.iter().take(12){d::muted(ui,format!("• {}",name.as_str().unwrap_or("")));}
                     if list.len()>12{d::muted(ui,format!("… y {} más",list.len()-12));}
                 }}

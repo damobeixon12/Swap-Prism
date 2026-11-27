@@ -14,6 +14,8 @@ mod media;
 mod tracker;
 mod live_match;
 mod engine;
+mod extras;
+mod assist;
 mod community;
 mod update_panel;
 mod ranks;
@@ -75,7 +77,8 @@ enum Event {
     Downloaded(Result<PathBuf, String>),
     UpdateBytes(u64,Option<u64>),
     Presence(bool),
-    Toggle,
+    /// F8 or the tray icon showed (true) or hid the window.
+    Shown(bool),
     Located(Option<(PathBuf, String)>),
     Catalog(Result<Value, String>),
 }
@@ -204,6 +207,25 @@ struct App {
     tracker_polled: Option<std::time::Instant>,
     tracker_reloaded: Option<std::time::Instant>,
     tracker_saved: Option<u64>,
+    /// Plans of the apply in flight, recorded in data/applied.json when it succeeds.
+    applying: Vec<(String, Value)>,
+    /// «queue» or «reapply» waiting for Rocket League to close; when it closed.
+    apply_waiting: Option<&'static str>,
+    closed_at: Option<Instant>,
+    notify_apply: bool,
+    reset_dismissed: bool,
+    sets: Vec<Value>,
+    set_name: String,
+    palette: Option<String>,
+    palette_index: usize,
+    only_favorites: bool,
+    /// Big previews already requested this session (data/thumbnails-large).
+    large_requested: std::collections::HashSet<String>,
+    /// Disk use shown in Ajustes (engine «storage»).
+    storage: Value,
+    guide_step: Option<usize>,
+    news_open: bool,
+    autostart: bool,
 }
 impl App {
     fn new(cc: &eframe::CreationContext<'_>, root: PathBuf, smoke: Option<PathBuf>) -> Self {
@@ -221,7 +243,7 @@ impl App {
         let telemetry =
             telemetry::Controller::new(root.clone(), cc.egui_ctx.clone(), overlay_preferences.fps);
         let (tx, rx) = mpsc::channel();
-        let app = Self {
+        let mut app = Self {
             rank_draft:read_json(&root.join("data/rank-draft.json")),
             crop_view:None,
             image_sources:read_json(&root.join("data/profile-sources.json")),
@@ -338,7 +360,26 @@ impl App {
             tracker_polled: None,
             tracker_reloaded: None,
             tracker_saved: None,
+            applying: Vec::new(),
+            apply_waiting: None,
+            closed_at: None,
+            notify_apply: false,
+            reset_dismissed: false,
+            sets: read_json(&root.join("data/sets.json")).as_array().cloned().unwrap_or_default(),
+            set_name: String::new(),
+            palette: None,
+            palette_index: 0,
+            only_favorites: false,
+            large_requested: Default::default(),
+            storage: Value::Null,
+            guide_step: None,
+            news_open: false,
+            autostart: platform::autostart(),
         };
+        // First run: a short guide. Everyone else: the news of this version, once.
+        if app.config["onboarded"] != true && !root.join("data/swaps.json").exists() { app.guide_step = Some(0); }
+        app.news_open = app.guide_step.is_none() && app.config["seen_news"] != assist::NEWS_VERSION;
+        cc.egui_ctx.set_zoom_factor(app.config["ui_scale"].as_f64().unwrap_or(1.).clamp(0.8, 1.3) as f32);
         if let Some(i) = std::env::args().position(|a| a == "--overlay-window-check") {
             app.overlay_placement.lock().unwrap().capture =
                 std::env::args().nth(i + 1).map(PathBuf::from);
@@ -366,7 +407,6 @@ impl App {
         let paint = cc.egui_ctx.clone();
         let send = tx.clone();
         thread::spawn(move || {
-            let mut visible = true;
             let mut pressed = false;
             let mut last = None;
             loop {
@@ -378,13 +418,21 @@ impl App {
                 let now = unsafe {
                     windows_sys::Win32::UI::Input::KeyboardAndMouse::GetAsyncKeyState(0x77)
                 } < 0;
-                if now && !pressed {
-                    visible = !visible;
+                let tray = platform::TRAY_TOGGLE.swap(false, std::sync::atomic::Ordering::Relaxed);
+                if (now && !pressed) || tray {
+                    let visible = !platform::main_window_visible();
                     paint.send_viewport_cmd(egui::ViewportCommand::Visible(visible));
                     if visible {
                         paint.send_viewport_cmd(egui::ViewportCommand::Focus);
                     }
-                    let _ = send.send(Event::Toggle);
+                    let _ = send.send(Event::Shown(visible));
+                    paint.request_repaint();
+                }
+                if platform::TRAY_EXIT.swap(false, std::sync::atomic::Ordering::Relaxed) {
+                    // Shown first: if the app is busy the close is refused, and then you can see why.
+                    paint.send_viewport_cmd(egui::ViewportCommand::Visible(true));
+                    paint.send_viewport_cmd(egui::ViewportCommand::Close);
+                    let _ = send.send(Event::Shown(true));
                     paint.request_repaint();
                 }
                 pressed = now;
@@ -517,9 +565,12 @@ impl App {
                     self.job_fraction=None;
                     if action.starts_with("game_settings"){self.settings_loading=false;}
                     if action.starts_with("launcher_"){self.launcher_loading=false;}
+                    if action.starts_with("storage")&&result.is_err(){self.storage=json!({});}
                     if let Err(error) = &result {
                         let _ = fs::write(self.root.join("data/last-error.txt"), error);
                     }
+                    let applied = action == "apply";
+                    let ok = result.is_ok();
                     match result {
                         Err(e) => self.status = e,
                         Ok(v) => {
@@ -559,6 +610,8 @@ impl App {
                                 if let Some(packs)=v["packs"].as_array(){self.packs=packs.clone();}
                                 if let Some(sounds)=v["sounds"].as_array(){self.audio_library=sounds.clone();}
                                 self.status=if action=="media_download"{"Contenido disponible en Mi biblioteca. Elígelo para añadirlo a los cambios sin aplicar."}else if action=="media_preview"{"Preescucha terminada. No se ha añadido el sonido a tu biblioteca."}else{"Catálogo actualizado."}.into();
+                            } else if action.starts_with("storage") {
+                                self.storage_result(&action, v);
                             } else if action.starts_with("workshop_") {
                                 self.workshop_data=v;
                                 self.status=if action=="workshop_download"||action=="workshop_import"{"Mapa guardado en la biblioteca. Pulsa Elegir para añadirlo a los cambios sin aplicar."}else{"Biblioteca de mapas actualizada."}.into();
@@ -582,7 +635,7 @@ impl App {
                             } else if action == "verify_files" {
                                 self.state=v["state"].clone();self.profile_state=v["profile"].clone();
                                 let healed=v["healed"].as_array().map(|a|a.len()).unwrap_or(0);let modified=v["modified"].as_array().map(|a|a.len()).unwrap_or(0);
-                                self.status=if v["epic"]!=true{"No hay manifiesto de Epic (Steam): solo se comprobaron las copias de Swap Prism.".into()}else if modified>0{format!("{modified} archivo(s) modificados fuera de Swap Prism. Verifica los archivos en Epic y vuelve a comprobar.")}else if healed>0{format!("Archivos correctos. {healed} cambio(s) los había quitado Epic: vuelve a aplicarlos.")}else{"Todos los archivos están correctos.".into()};
+                                self.status=if v["epic"]!=true{"No hay manifiesto de Epic (Steam): solo se comprobaron las copias de Swap Prism.".into()}else if modified>0{format!("{modified} archivo(s) modificados fuera de Swap Prism. Verifica los archivos en Epic y vuelve a comprobar.")}else if healed>0{format!("Archivos correctos. {healed} cambio(s) los había quitado Epic: pulsa «Volver a ponerlos» arriba.")}else{"Todos los archivos están correctos.".into()};
                                 self.file_check=v;
                             } else if action == "open_epic" {
                                 self.status="Epic abierto: Biblioteca → Rocket League → ⋯ → Gestionar → Verificar.".into();
@@ -619,6 +672,8 @@ impl App {
                             }
                         }
                     }
+                    if applied { self.after_apply(ctx, ok); }
+                    if action == "verify_files" && ok { self.reset_dismissed = false; }
                 }
                 Event::Catalog(result) => {
                     self.catalog_checking = false;
@@ -647,13 +702,7 @@ impl App {
                     }
                 }
                 Event::Presence(value) => self.running = value,
-                Event::Toggle => {
-                    self.visible = !self.visible;
-                    ctx.send_viewport_cmd(egui::ViewportCommand::Visible(self.visible));
-                    if self.visible {
-                        ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
-                    }
-                }
+                Event::Shown(visible) => self.visible = visible,
                 Event::UpdateBytes(bytes,total)=>{self.update_bytes=bytes;self.update_total=total;},
                 Event::Update(result)=>{self.update_checking=false;match result{
                     Ok(release)=>{
@@ -681,6 +730,9 @@ impl App {
     }
 }
 impl eframe::App for App {
+    fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
+        platform::tray_remove();
+    }
     fn clear_color(&self, _visuals: &egui::Visuals) -> [f32; 4] {
         [0., 0., 0., 0.]
     }
@@ -703,6 +755,7 @@ impl eframe::App for App {
         }
         self.prepare_design(ctx);
         self.render(ctx);
+        self.apply_when_closed(ctx);
         if self.overlay_preferences.rank{self.rank_tick();}
         self.sync_tracker(ctx,_frame);
         self.lobby_tick(ctx,_frame);
@@ -778,11 +831,14 @@ fn main() {
     } else {
         None
     };
+    // Started with Windows: hidden, in the tray (F8 or the icon shows it).
+    let tray = args.iter().any(|a| a == "--tray");
     let shot=if args.get(1).map(String::as_str)==Some("--screenshot"){args.get(2).cloned().zip(args.get(3).map(PathBuf::from))}else{None};
     let image = image::load_from_memory(include_bytes!("../assets/logo.png"))
         .unwrap()
         .into_rgba8();
     let (w, h) = image.dimensions();
+    let tray_icon = image::imageops::resize(&image, 32, 32, image::imageops::FilterType::Triangle).into_raw();
     let name: Vec<u16> = "Local\\SWAPPRISM.SingleInstance\0".encode_utf16().collect();
     let _instance = unsafe {
         windows_sys::Win32::System::Threading::CreateMutexW(std::ptr::null(), 0, name.as_ptr())
@@ -809,6 +865,7 @@ fn main() {
             // even when its framebuffer pixels are transparent.
             .with_transparent(true)
             .with_inner_size([1280., 860.])
+            .with_visible(!tray)
             .with_min_inner_size([1060., 740.])
             .with_icon(egui::IconData {
                 rgba: image.into_raw(),
@@ -817,11 +874,15 @@ fn main() {
             }),
         ..Default::default()
     };
+    if shot.is_none() && smoke.is_none() && !args.iter().any(|a| a == "--design-check") {
+        platform::tray(tray_icon);
+    }
     if let Err(e) = eframe::run_native(
         "Swap Prism",
         options,
         Box::new(move |cc| {
             let mut app=App::new(cc, root, smoke);
+            app.visible=!tray;
             if let Some((section,file))=shot{
                 let(section,tab)=section.split_once(':').unwrap_or((section.as_str(),""));
                 app.go_to(section);

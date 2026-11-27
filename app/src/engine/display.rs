@@ -313,7 +313,7 @@ pub fn patch_title(data: &[u8], value: &Value) -> R<(Vec<u8>, Vec<String>)> {
     let mut fields = Vec::new();
     let mut strings: Vec<String> = Vec::new();
     let base = abc.strings.len();
-    let mut string = |value: &str, strings: &mut Vec<String>| -> Vec<u8> {
+    let string = |value: &str, strings: &mut Vec<String>| -> Vec<u8> {
         let i = match strings.iter().position(|s| s == value) { Some(i) => i, None => { strings.push(value.to_owned()); strings.len() - 1 } };
         op(0x2c, (base + i) as u32)
     };
@@ -323,7 +323,7 @@ pub fn patch_title(data: &[u8], value: &Value) -> R<(Vec<u8>, Vec<String>)> {
     let hexint = |key: &str| i64::from_str_radix(&title[key].as_str().unwrap_or("#000000")[1..], 16).unwrap_or(0);
     let colors: HashMap<&str, String> = [("Text", title_text(&title)), ("Color", (if multicolor { 0xffffff } else { hexint("color") }).to_string()),
         ("GlowColor", (if title["glow_enabled"] == true { hexint("glow") } else { 0 }).to_string())].into_iter().collect();
-    let mut set = |mid: u32, code: Vec<u8>, changed: &mut BTreeMap<u32, Vec<u8>>, order: &mut Vec<u32>| { if !order.contains(&mid) { order.push(mid); } changed.insert(mid, code); };
+    let set = |mid: u32, code: Vec<u8>, changed: &mut BTreeMap<u32, Vec<u8>>, order: &mut Vec<u32>| { if !order.contains(&mid) { order.push(mid); } changed.insert(mid, code); };
     let cls = "tagame.api.PlayerTitlesPlayerTitlesRow";
     for field in ["Text", "Color", "GlowColor"] {
         let Some(mid) = getter(&abc, cls, false, field)? else { continue };

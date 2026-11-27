@@ -24,7 +24,7 @@ pub fn bridge_imports(pkg: Package, specs: &[(String, String)], extra_names: &[S
     let mut names = pkg.names.clone();
     let mut name_bytes = Vec::new();
     let mut imports = pkg.imports.clone();
-    let mut name = |text: &str, names: &mut Vec<String>, name_bytes: &mut Vec<u8>| -> R<i32> {
+    let name = |text: &str, names: &mut Vec<String>, name_bytes: &mut Vec<u8>| -> R<i32> {
         let lower = text.to_lowercase();
         if let Some(i) = names.iter().position(|n| n.to_lowercase() == lower) { return Ok(i as i32); }
         let mut raw = encode_cp1252(text)?;

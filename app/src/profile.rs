@@ -107,7 +107,7 @@ impl App {
     }
 
     /// Opens the framing viewer; a picture the viewer cannot measure is imported centred, as before.
-    fn open_crop(&mut self,kind:&str,path:&str,last:Option<&Value>){
+    pub(super) fn open_crop(&mut self,kind:&str,path:&str,last:Option<&Value>){
         let Ok((w,h))=image::image_dimensions(path) else{self.call("profile_import",json!({"action":"profile_import","kind":kind,"path":path}));return};
         let (w,h)=(w as f32,h as f32);
         let mut view=profile::CropView{kind:kind.into(),path:path.into(),size:(w,h),zoom:1.,center:(w/2.,h/2.)};

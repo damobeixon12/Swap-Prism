@@ -276,7 +276,7 @@ fn neutralize_color_method(code: &[u8], abc: &Abc, identity_id: u32, require_ful
     let mut edits = Vec::new();
     let replacements = ["COLOR_GLOW_RED", "COLOR_GLOW_AMBER", "COLOR_BOOST_MAX", "COLOR_BOOST_NORMAL", "COLOR_BACKGROUND_AMBER"];
     let mut found: Vec<String> = Vec::new();
-    let mut put = |out: &mut Vec<u8>, start: usize, end: usize| -> R<()> {
+    let put = |out: &mut Vec<u8>, start: usize, end: usize| -> R<()> {
         if neutral.len() > end - start { return Err("El reemplazo de color cambia los saltos del HUD.".into()); }
         out[start..start + neutral.len()].copy_from_slice(&neutral);
         out[start + neutral.len()..end].fill(0x02);

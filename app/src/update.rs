@@ -104,9 +104,6 @@ pub fn check(url: &str, current: &str) -> Result<Option<Release>, String> {
         None
     })
 }
-pub fn download(release: &Release, root: &Path) -> Result<PathBuf, String> {
-    download_progress(release,root,|_,_|{})
-}
 pub fn download_progress(release:&Release,root:&Path,mut progress:impl FnMut(u64,Option<u64>))->Result<PathBuf,String>{
     if !validate(release, env!("CARGO_PKG_VERSION"))?{return Err("Esta versión no es una actualización estable más reciente.".into());}
     let dir = root.join("data/updates");

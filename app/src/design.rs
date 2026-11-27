@@ -105,10 +105,6 @@ pub fn setup(ctx: &egui::Context) {
 }
 pub struct Surface(egui::Frame);
 impl Surface {
-    pub fn fill(mut self, color: Color32) -> Self {
-        self.0 = self.0.fill(color);
-        self
-    }
     pub fn inner_margin(mut self, margin: impl Into<egui::Margin>) -> Self {
         self.0 = self.0.inner_margin(margin);
         self

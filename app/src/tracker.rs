@@ -1,5 +1,4 @@
 use super::*;
-use crate::design as d;
 
 /// Current rating per ranked playlist, read from the visible text of the user's own Tracker page.
 const MMR_SCRIPT:&str=r#"(()=>[...document.body.innerText.matchAll(/RANKED (DUEL 1V1|DOUBLES 2V2|STANDARD 3V3)\s*\n\s*Current\s*\n\s*([\d.,]+)/gi)].map(m=>[m[1].toUpperCase(),m[2]]))()"#;
@@ -112,24 +111,6 @@ impl App{
         }else if let Some(view)=&self.lobby_web{let _=view.load_url(&url);}
         let before=self.lobby_results.lock().unwrap().iter().filter(|r|r.0==name).count();
         self.lobby_current=Some((name,now,now,before));
-    }
-
-    pub(super) fn tracker_editor(&mut self,ui:&mut egui::Ui){
-        ui.heading("Tu rango real");d::muted(ui,"Perfil oficial de Rocket League Tracker. Independiente de tu fake rank local.");
-        ui.horizontal_wrapped(|ui|{
-            ui.label("Epic Games");ui.add(egui::TextEdit::singleline(&mut self.tracker_name).hint_text("Tu nombre exacto").desired_width(210.));
-            if ui.button("Ver mi Tracker").clicked(){match profile_url(&self.tracker_name){Ok(url)=>{
-                let _=fs::write(self.root.join("data/tracker.json"),json!({"epic":self.tracker_name.trim()}).to_string());
-                self.tracker_requested=Some(url);self.tracker_error.clear();
-            },Err(e)=>self.tracker_error=e}}
-            if let Ok(url)=profile_url(&self.tracker_name){ui.hyperlink_to("Abrir en navegador",url);}
-            if ui.button("Recargar").clicked(){if let Some(view)=&self.tracker_web{let _=view.reload();}}
-        });
-        d::muted(ui,"La web gestiona sus datos y comprobaciones. Swap Prism no usa su API privada ni calcula un MMR real estimado.");
-        if !self.tracker_error.is_empty(){ui.label(RichText::new(&self.tracker_error).color(d::RED()));}
-        let (rect,_)=ui.allocate_exact_size(Vec2::new(ui.available_width(),ui.available_height().max(160.)),egui::Sense::hover());
-        self.tracker_bounds=rect;
-        if self.tracker_requested.is_none(){ui.painter().text(rect.center(),egui::Align2::CENTER_CENTER,"Pulsa Ver mi Tracker para cargar tu perfil aquí.",egui::FontId::proportional(17.),d::MUTED());}
     }
 
     /// Keeps the rank overlay fed: tiers from the save, MMR from the Tracker page (reloaded every 2 min while playing).

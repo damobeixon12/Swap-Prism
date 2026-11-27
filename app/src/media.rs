@@ -4,8 +4,10 @@ use crate::design as d;
 impl App{
     /// One compact row per sound: play, name, small waveform, «Usar».
     pub(super) fn sound_library(&mut self,ui:&mut egui::Ui){
-        let items:Vec<_>=self.audio_library.iter().filter(|a|s(a,"kind")==self.studio_sound_kind).cloned().collect();
-        if items.is_empty(){d::muted(ui,"Aún no tienes sonidos. Elige un MP3 o descárgalo.");return;}
+        let any=self.audio_library.iter().any(|a|s(a,"kind")==self.studio_sound_kind);
+        if any{crate::design::toggle(ui,&mut self.only_favorites,"Favoritos");ui.add_space(8.);}
+        let items:Vec<_>=self.audio_library.iter().filter(|a|s(a,"kind")==self.studio_sound_kind&&(!self.only_favorites||self.is_favorite(&format!("sound:{}",s(a,"path"))))).cloned().collect();
+        if items.is_empty(){d::muted(ui,if any{"No tienes favoritos aquí. Toca la estrella de un sonido."}else{"Aún no tienes sonidos. Elige un MP3 o descárgalo."});return;}
         let current=self.studio_draft["sounds"][&self.studio_sound_kind]["path"].clone();
         egui::ScrollArea::vertical().id_salt("sound-library").show(ui,|ui|{d::card().inner_margin(egui::Margin::symmetric(16,6)).show(ui,|ui|{
             for(n,audio)in items.iter().enumerate(){
@@ -17,7 +19,10 @@ impl App{
                     let c=b.center();let tri=if resp.hovered(){d::BACKGROUND()}else{d::TEXT()};
                     ui.painter().add(egui::Shape::convex_polygon(vec![c+Vec2::new(-4.,-7.),c+Vec2::new(8.,0.),c+Vec2::new(-4.,7.)],tri,egui::Stroke::NONE));
                     if resp.on_hover_cursor(egui::CursorIcon::PointingHand).on_hover_text("Escuchar").clicked()&&!self.busy{self.call("sound_preview",json!({"action":"sound_preview","path":audio["path"],"start":audio["start"],"end":audio["end"],"volume":audio["volume"]}));}
-                    ui.add_space(6.);
+                    ui.add_space(4.);
+                    let(star,_)=ui.allocate_exact_size(Vec2::splat(24.),egui::Sense::hover());
+                    self.favorite_star(ui,star.center(),&format!("sound:{}",s(audio,"path")),true);
+                    ui.add_space(2.);
                     ui.vertical(|ui|{ui.add_space(6.);ui.add(egui::Label::new(RichText::new(s(audio,"name"))).truncate());ui.label(RichText::new(format!("{:.1} s",audio["seconds"].as_f64().unwrap_or(0.))).size(12.).color(d::MUTED()));});
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center),|ui|{
                         let chosen=audio["path"]==current;

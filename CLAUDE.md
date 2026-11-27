@@ -65,5 +65,5 @@ scripts\swapprism-build.cmd release            # lo que hace Preparar update.cmd
 
 Ver `docs/PENDIENTES.md`. Resumen:
 - Sin confirmar en juego: fake rank (MMR 1600), color del flip reset, nombre al marcar, cambio de modelo (Body), reinicio del actualizador 0.29.0→0.29.1.
-- Sin hacer: ping/MMR reales en el overlay (sin fuente fiable), Auto GG, texto «BOOM» naranja de Air Strike.
+- Descartado por el usuario: ping/MMR reales en el overlay, Auto GG, texto «BOOM» de Air Strike. Siguiente: app en inglés (0.34.0).
 - Lecciones técnicas (sonido de poste, boostmeter x4, logo `img://`, overlay transparente, PresentMon) también en `docs/PENDIENTES.md`.
