@@ -95,7 +95,7 @@ impl App{
                                 self.studio_draft["sounds"][kind]["start"]=json!(start);self.studio_draft["sounds"][kind]["end"]=json!(end);
                                 ui.horizontal(|ui|{let mut name=s(&selected,"name").to_owned();if ui.add(egui::TextEdit::singleline(&mut name).char_limit(64).hint_text("Nombre del sonido")).changed(){self.studio_draft["sounds"][kind]["name"]=json!(name);}});
                                 let mut volume=selected["volume"].as_f64().unwrap_or(1.0)as f32;
-                                if ui.add(egui::Slider::new(&mut volume,0.0..=1.0).text("Volumen").custom_formatter(|v,_|format!("{} %",(v*100.).round()as u32))).changed(){self.studio_draft["sounds"][kind]["volume"]=json!(volume);}
+                                if ui.add(egui::Slider::new(&mut volume,0.0..=if kind=="post"{2.0}else{1.0}).text("Volumen").custom_formatter(|v,_|format!("{} %",(v*100.).round()as u32))).changed(){self.studio_draft["sounds"][kind]["volume"]=json!(volume);}
                                 ui.horizontal_wrapped(|ui|{
                                     if ui.add_enabled(!self.busy,egui::Button::new("Reproducir recorte")).clicked(){self.audio_preview=Some((kind.to_owned(),Instant::now(),end-start));self.call("sound_preview",json!({"action":"sound_preview","path":selected["path"],"volume":volume,"start":start,"end":end}));}
                                     if ui.add_enabled(!self.busy,d::button("Quitar",d::RED())).clicked(){self.studio_draft["sounds"][kind]=Value::Null;}

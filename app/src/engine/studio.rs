@@ -421,10 +421,10 @@ pub fn clip_wave(raw: &[u8], start: &Value, end: &Value, limit: f64) -> R<Vec<u8
 }
 
 pub fn with_volume(raw: &[u8], volume: &Value) -> R<Vec<u8>> {
-    let volume = number(volume).filter(|v| (0. ..=1.).contains(v)).ok_or("Volumen no válido.")?;
+    let volume = number(volume).filter(|v| (0. ..=2.).contains(v)).ok_or("Volumen no válido.")?;
     let pcm = wav_pcm(raw, "Audio preparado no válido.")?;
     if volume == 1. { return Ok(raw.to_vec()); }
-    let scaled: Vec<u8> = pcm.chunks_exact(2).flat_map(|c| (round_half_even(i16::from_le_bytes([c[0], c[1]]) as f64 * volume) as i16).to_le_bytes()).collect();
+    let scaled: Vec<u8> = pcm.chunks_exact(2).flat_map(|c| (round_half_even(i16::from_le_bytes([c[0], c[1]]) as f64 * volume).clamp(i16::MIN as i64, i16::MAX as i64) as i16).to_le_bytes()).collect();
     Ok(wav(&scaled))
 }
 

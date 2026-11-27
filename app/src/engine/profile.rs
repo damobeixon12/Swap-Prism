@@ -93,6 +93,8 @@ pub fn normalize(root: &Path, settings: &Value) -> R<Value> {
         super::dxt::load(&std::fs::read(&p).map_err(err)?)?;
         result[key] = p.display().to_string().into();
     }
+    // Which owned banner gets the picture (its package); absent = the equipped one.
+    if let Some(item) = settings["banner_item"].as_str().filter(|i| !i.is_empty() && !result["banner"].as_str().unwrap_or("").is_empty()) { result["banner_item"] = item.into(); }
     Ok(result)
 }
 
@@ -144,9 +146,13 @@ fn unaffected(cooked: &Path, settings: &Value, profile: &Value) -> R<Option<Vec<
     Ok(Some(keep))
 }
 
-/// Package of the banner equipped on the account, from the local save.
-fn equipped_banner() -> R<Option<String>> {
+/// Package of the banner that gets the picture: the one chosen from the inventory, or the one equipped (local save).
+fn equipped_banner(settings: &Value) -> R<Option<String>> {
     let snap = super::inventory::load_snapshot(&super::jobs::database())?;
+    if let Some(item) = settings["banner_item"].as_str() {
+        let owned = ["inventory", "account_equipped"].iter().flat_map(|k| snap[*k].as_array().into_iter().flatten()).any(|r| r["Slot"] == "Player Banner" && r["AssetPackage"] == item);
+        return if owned { Ok(Some(item.to_owned())) } else { Err("El banner elegido ya no está en tu inventario guardado.".into()) };
+    }
     Ok(snap["account_equipped"].as_array().into_iter().flatten().find(|r| r["Slot"] == "Player Banner" && r["AssetPackage"].as_str().is_some_and(|p| !p.is_empty())).and_then(|r| r["AssetPackage"].as_str().map(str::to_owned)))
 }
 
@@ -277,7 +283,7 @@ pub fn prepare(root: &Path, game: &Path, settings: &Value, progress: &dyn Fn(Val
         let equipped = snap["account_equipped"].as_array().into_iter().flatten().find(|r| r["Slot"] == "Player Title").map(|r| r["Product"].clone()).unwrap_or(json!(""));
         if settings["title"]["target"] != equipped { return Err("Equipa el título original elegido en Rocket League y ciérralo antes de aplicar.".into()); }
     }
-    let banner_package = if truthy(&settings["banner"]) { equipped_banner()? } else { None };
+    let banner_package = if truthy(&settings["banner"]) { equipped_banner(&settings)? } else { None };
     if profile["codec_revision"] == CODEC_REVISION && !truthy(&profile["partial"]) && settings == profile["settings"] && json!(banner_package) == profile.get("banner_package").cloned().unwrap_or(Value::Null) {
         let cooked = game.join("TAGame").join("CookedPCConsole");
         let mut all = true;

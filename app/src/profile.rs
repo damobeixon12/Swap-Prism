@@ -74,6 +74,27 @@ impl App {
             });
             ui.add_space(6.);
             d::muted(ui,"Solo lo ves tú, en tu cliente. Los demás jugadores ven tu perfil original.");
+            if !s(&self.profile_draft,"banner").is_empty(){
+                ui.add_space(12.);
+                let mut banners:Vec<(String,String)>=Vec::new();
+                for r in self.snapshot["inventory"].as_array().into_iter().flatten().filter(|r|r["Slot"]=="Player Banner"&&r["blueprint"]!=true){
+                    let(p,n)=(s(r,"AssetPackage"),s(r,"Product"));
+                    if !p.is_empty()&&!banners.iter().any(|b|b.0==p){banners.push((p.into(),n.into()));}
+                }
+                banners.sort_by(|a,b|a.1.cmp(&b.1));
+                let current=s(&self.profile_draft,"banner_item").to_owned();
+                const EQUIPPED:&str="El que tengas equipado";
+                let shown=banners.iter().find(|b|b.0==current).map(|b|b.1.clone()).unwrap_or(EQUIPPED.into());
+                ui.horizontal(|ui|{
+                    ui.label("Banner que se cambia");
+                    egui::ComboBox::from_id_salt("banner-item").selected_text(shown).width(280.).show_ui(ui,|ui|{
+                        if ui.selectable_label(current.is_empty(),EQUIPPED).clicked(){if let Some(o)=self.profile_draft.as_object_mut(){o.remove("banner_item");}changed=true;}
+                        for(p,n)in &banners{if ui.selectable_label(current==*p,n).clicked(){self.profile_draft["banner_item"]=json!(p);changed=true;}}
+                    });
+                });
+                d::muted(ui,"Quien lleve ese mismo banner también verá el tuyo: elige uno que casi nadie use y equípalo en el juego.");
+                ui.label(RichText::new("Aviso: con el perfil personalizado puede que veas algunos avatares en negro (sobre todo en las repeticiones).").color(d::RED()));
+            }
         });
         if changed{self.queue_profile(self.profile_draft.clone());}
         self.crop_window(ui.ctx());
